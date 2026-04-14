@@ -19,28 +19,27 @@
 
 ```mermaid
 flowchart TD
-    Q["Вопрос пользователя Q"] --> D["Декомпозиция запроса: LVLM(P, Q)"]
-    D --> R["R = {R_asr, R_det, R_type}"]
-    R --> RET["Поиск по модальностям с учётом R_type"]
+    Q[Вопрос пользователя Q] --> D[Декомпозиция запроса LVLM]
+    D --> R[R_asr R_det R_type]
 
-    V["Видео V"] --> ASR["Речь: ASR, Whisper"]
-    V --> OCR["Текст на экране: OCR, EasyOCR"]
-    V --> DET["Визуальные объекты: DET, Scene Graph"]
+    V[Видео V] --> E[Извлечение вспомогательных текстов]
+    E --> ASR[ASR Whisper речь]
+    E --> OCR[OCR EasyOCR текст на экране]
+    E --> DET[DET Scene Graph объекты]
 
-    ASR --> ASRDB["Индекс речи DB_asr"]
-    OCR --> OCRDB["Индекс экранного текста DB_ocr"]
-    DET --> DETDB["Индекс объектов DB_det"]
+    ASR --> DB[Индексы DB_asr DB_ocr DB_det]
+    OCR --> DB
+    DET --> DB
 
-    ASRDB --> RET
-    OCRDB --> RET
-    DETDB --> RET
+    R --> RET[Retrieval по модальностям и R_type]
+    DB --> RET
 
-    RET --> FV["Отобранный видеофрагмент F_v"]
-    RET --> AM["Найденные вспомогательные тексты A_m"]
-    AM --> GEN["Финальный LVLM: видеофрагмент, A_m и Q"]
+    RET --> AM[A_m найденные вспомогательные тексты]
+    RET --> FV[F_v выбранный видеофрагмент]
+
+    AM --> GEN[Финальный LVLM Q A_m F_v]
     FV --> GEN
-    Q --> GEN
-    GEN --> O["Ответ O с видео и интервалом"]
+    GEN --> O[Ответ O с видео и интервалом]
 ```
 
 Модальности:
