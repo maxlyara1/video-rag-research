@@ -1,0 +1,64 @@
+project:
+  name: video-rag-research
+
+data:
+  materials_dir: ./lera_materials
+  prepared_videos_dir: ./data/videos
+  artifacts_dir: ./data/artifacts
+  qdrant_dir: ./data/qdrant
+
+runtime:
+  device: auto
+  torch_dtype: auto
+  enable_mps_fallback: true
+  mps_high_watermark_ratio: 0.95
+  mps_low_watermark_ratio: 0.90
+
+query_decoupler:
+  enabled: true
+  model: Qwen/Qwen3-0.6B
+  max_new_tokens: 192
+
+asr:
+  enabled: true
+  backend: whisper
+  model: small
+  language: ru
+  no_speech_threshold: 0.6
+
+ocr:
+  enabled: true
+  languages: [ru, en]
+  frame_step_sec: 5.0
+  min_confidence: 0.3
+
+det:
+  enabled: true
+  model: Salesforce/blip-image-captioning-base
+  frame_step_sec: 5.0
+  max_new_tokens: 60
+  spacy_model: en_core_web_sm
+
+indexing:
+  collection_prefix: video_rag_research
+  embedding_model: Qwen/Qwen3-Embedding-0.6B
+  embedding_max_length: 2048
+  batch_size: 8
+  qdrant_host: localhost
+  qdrant_port: 6333
+  qdrant_path: ./data/qdrant
+
+search:
+  per_modality_top_k: 12
+  final_top_k: 5
+  merge_gap_sec: 6.0
+  modality_weights:
+    asr: 1.0
+    ocr: 0.8
+    det: 0.7
+
+reranker:
+  enabled: true
+  model: Qwen/Qwen3-Reranker-0.6B
+  max_length: 2048
+  batch_size: 8
