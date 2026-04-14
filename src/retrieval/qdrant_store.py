@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import atexit
+import uuid
 from pathlib import Path
 
 import numpy as np
 from qdrant_client import QdrantClient, models
 
 from src.models import ModalityRecord, SearchHit
+
+
+_POINT_ID_NAMESPACE = uuid.UUID("3f4e14a9-527f-4e33-9f3d-e5c8e4ce5d5f")
+
+
+def _stable_point_id(record: ModalityRecord) -> str:
+    return str(uuid.uuid5(_POINT_ID_NAMESPACE, record.record_id))
 
 
 class QdrantStore:
@@ -51,6 +59,7 @@ class QdrantStore:
         points: list[models.PointStruct] = []
         for record, embedding in zip(records, embeddings):
             payload = {
+                "record_id": record.record_id,
                 "video_file": record.video_file,
                 "modality": record.modality,
                 "start": record.start,
@@ -60,7 +69,7 @@ class QdrantStore:
             }
             points.append(
                 models.PointStruct(
-                    id=record.record_id,
+                    id=_stable_point_id(record),
                     vector=embedding.tolist(),
                     payload=payload,
                 )

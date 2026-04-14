@@ -1,4 +1,4 @@
-QUERY_DECOUPLE_SYSTEM_PROMPT = """You decompose video-understanding queries for a Video-RAG pipeline.
+QUERY_DECOUPLE_SYSTEM_PROMPT = """You are the Query Decouple LVLM stage of a Video-RAG pipeline.
 
 Return JSON only with the schema:
 {

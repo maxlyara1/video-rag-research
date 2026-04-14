@@ -27,6 +27,7 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{minutes}м {secs:.0f}с"
 
 if TYPE_CHECKING:
+    from src.generation import GeminiAnswerGenerator, GeminiSettings
     from src.modules.query_decoupler import QueryDecoupler
     from src.retrieval import Embedder, QdrantStore, Reranker
 
@@ -55,21 +56,38 @@ class VideoRAGPipeline:
         self._embedder: "Embedder | None" = None
         self._store: "QdrantStore | None" = None
         self._reranker: "Reranker | None" = None
-        self._query_decoupler: "QueryDecoupler | None" = None
+        self._query_decoupler: "QueryDecoupler | object | None" = None
+        self._answer_generator: "GeminiAnswerGenerator | None" = None
         self._extractors: dict[str, object] = {}
 
     def _get_embedder(self) -> "Embedder":
-        from src.retrieval import Embedder
-
         if self._embedder is None:
             runtime_cfg = self.cfg["runtime"]
             indexing_cfg = self.cfg["indexing"]
-            self._embedder = Embedder(
-                model_name=indexing_cfg["embedding_model"],
-                device=runtime_cfg["device"],
-                torch_dtype=runtime_cfg["torch_dtype"],
-                max_length=indexing_cfg.get("embedding_max_length", 2048),
-            )
+            backend = indexing_cfg.get("embedding_backend", "local")
+            if backend == "tei":
+                from src.retrieval import TEIEmbedder
+
+                self._embedder = TEIEmbedder(
+                    endpoint=indexing_cfg.get("tei_endpoint", "http://127.0.0.1:8080"),
+                    model_name=indexing_cfg["embedding_model"],
+                    dim=indexing_cfg.get("embedding_dim", 1024),
+                    timeout_sec=indexing_cfg.get("tei_timeout_sec", 120.0),
+                    query_instruction=indexing_cfg.get("query_instruction"),
+                )
+            elif backend == "local":
+                from src.retrieval import Embedder
+
+                self._embedder = Embedder(
+                    model_name=indexing_cfg["embedding_model"],
+                    device=runtime_cfg["device"],
+                    torch_dtype=runtime_cfg["torch_dtype"],
+                    max_length=indexing_cfg.get("embedding_max_length", 2048),
+                    query_instruction=indexing_cfg.get("query_instruction"),
+                    output_dim=indexing_cfg.get("embedding_dim"),
+                )
+            else:
+                raise ValueError(f"Unknown indexing.embedding_backend: {backend}")
         return self._embedder
 
     def _get_store(self) -> "QdrantStore":
@@ -99,19 +117,66 @@ class VideoRAGPipeline:
             )
         return self._reranker
 
-    def _get_query_decoupler(self) -> "QueryDecoupler | None":
-        from src.modules.query_decoupler import QueryDecoupler
-
+    def _get_query_decoupler(self) -> "QueryDecoupler | object | None":
         if self._query_decoupler is None and self.cfg["query_decoupler"].get("enabled", True):
             runtime_cfg = self.cfg["runtime"]
             decouple_cfg = self.cfg["query_decoupler"]
-            self._query_decoupler = QueryDecoupler(
-                decouple_cfg["model"],
-                device=runtime_cfg["device"],
-                torch_dtype=runtime_cfg["torch_dtype"],
-                max_new_tokens=decouple_cfg.get("max_new_tokens", 192),
-            )
+            backend = decouple_cfg.get("backend", "local")
+            if backend == "gemini":
+                from src.generation import GeminiQueryDecoupler
+
+                self._query_decoupler = GeminiQueryDecoupler(
+                    self._gemini_settings(model_names_key="query_model_names"),
+                    max_output_tokens=decouple_cfg.get("max_new_tokens", 192),
+                )
+            elif backend == "local":
+                from src.modules.query_decoupler import QueryDecoupler
+
+                self._query_decoupler = QueryDecoupler(
+                    decouple_cfg["model"],
+                    device=runtime_cfg["device"],
+                    torch_dtype=runtime_cfg["torch_dtype"],
+                    max_new_tokens=decouple_cfg.get("max_new_tokens", 192),
+                )
+            else:
+                raise ValueError(f"Unknown query_decoupler.backend: {backend}")
         return self._query_decoupler
+
+    def _get_answer_generator(self) -> "GeminiAnswerGenerator":
+        if self._answer_generator is None:
+            answer_cfg = self.cfg.get("answering", {})
+            if not answer_cfg.get("enabled", True):
+                raise RuntimeError("Answer generation is disabled in answering.enabled")
+            provider = answer_cfg.get("provider", "gemini")
+            if provider != "gemini":
+                raise ValueError(f"Unknown answering.provider: {provider}")
+
+            from src.generation import GeminiAnswerGenerator
+
+            self._answer_generator = GeminiAnswerGenerator(
+                self._gemini_settings(model_names_key="model_names"),
+                max_context_candidates=answer_cfg.get("max_context_candidates", 5),
+                max_video_candidates=answer_cfg.get("max_video_candidates", 1),
+                window_padding_sec=answer_cfg.get("window_padding_sec", 2.0),
+                video_fps=answer_cfg.get("video_fps", 1.0),
+                cleanup_uploaded_files=answer_cfg.get("cleanup_uploaded_files", True),
+            )
+        return self._answer_generator
+
+    def _gemini_settings(self, *, model_names_key: str) -> "GeminiSettings":
+        from src.generation import GeminiSettings
+
+        gemini_cfg = self.cfg.get("gemini", {})
+        return GeminiSettings(
+            api_keys=_as_tuple(gemini_cfg.get("api_keys")),
+            model_names=_as_tuple(gemini_cfg.get(model_names_key) or gemini_cfg.get("model_names")),
+            temperature=float(gemini_cfg.get("temperature", 0.2)),
+            max_output_tokens=int(gemini_cfg.get("max_output_tokens", 1024)),
+            timeout_sec=float(gemini_cfg.get("timeout_sec", 120)),
+            minimize_thinking=bool(gemini_cfg.get("minimize_thinking", True)),
+            flash_thinking_level=str(gemini_cfg.get("flash_thinking_level", "minimal")),
+            flash_25_thinking_budget=int(gemini_cfg.get("flash_25_thinking_budget", 0)),
+        )
 
     def _get_extractors(self) -> dict[str, object]:
         from src.modules import (
@@ -248,7 +313,7 @@ class VideoRAGPipeline:
         if not videos:
             raise RuntimeError("Нет подготовленных видео. Сначала запусти prepare_dataset.")
 
-        modalities = list(self._get_extractors().keys())
+        modalities = self.enabled_modalities()
         total = len(videos)
         logger.info(
             "=== Этап 1/2: извлечение [%s] из %d видео ===",
@@ -320,8 +385,8 @@ class VideoRAGPipeline:
         )
 
         modality_queries = {
-            "asr": decomposition.asr_query or query,
-            "ocr": decomposition.asr_query or query,
+            "asr": self._build_text_retrieval_query(query, decomposition.asr_query),
+            "ocr": self._build_text_retrieval_query(query, decomposition.asr_query),
             "det": self._build_det_query(decomposition),
         }
 
@@ -329,12 +394,16 @@ class VideoRAGPipeline:
         top_k = self.cfg["search"].get("per_modality_top_k", 12)
         store = self._get_store()
         embedder = self._get_embedder()
+        score_threshold = self.cfg["search"].get("score_threshold")
         for modality in self.enabled_modalities():
             modality_query = modality_queries.get(modality) or query
             if not modality_query.strip():
                 continue
             query_vector = embedder.embed_query(modality_query)
-            all_hits.extend(store.search(modality, query_vector, top_k=top_k))
+            hits = store.search(modality, query_vector, top_k=top_k)
+            if score_threshold is not None:
+                hits = [hit for hit in hits if hit.score >= float(score_threshold)]
+            all_hits.extend(hits)
 
         candidates = self._merge_hits(all_hits)
         final_top_k = self.cfg["search"].get("final_top_k", 5)
@@ -346,11 +415,29 @@ class VideoRAGPipeline:
             candidates = candidates[:final_top_k]
         return decomposition, candidates
 
+    def answer(self, query: str) -> tuple[QueryDecomposition, list[CandidateWindow], str, str | None, int | None]:
+        decomposition, candidates = self.search(query)
+        generator = self._get_answer_generator()
+        answer, model_name, key_index = generator.generate(
+            query=query,
+            decomposition=decomposition,
+            candidates=candidates,
+        )
+        return decomposition, candidates, answer, model_name, key_index
+
     def _build_det_query(self, decomposition: QueryDecomposition) -> str:
         if not decomposition.det_queries:
             return decomposition.original_query
         parts = decomposition.det_queries + [decomposition.det_mode]
         return ", ".join(part for part in parts if part)
+
+    @staticmethod
+    def _build_text_retrieval_query(original_query: str, decoupled_query: str | None) -> str:
+        if not decoupled_query:
+            return original_query
+        if decoupled_query.strip() == original_query.strip():
+            return original_query
+        return f"{original_query}\n{decoupled_query}"
 
     def _merge_hits(self, hits: list[SearchHit]) -> list[CandidateWindow]:
         gap = float(self.cfg["search"].get("merge_gap_sec", 6.0))
@@ -449,6 +536,9 @@ class VideoRAGPipeline:
         if self._embedder is not None:
             self._embedder.close()
             self._embedder = None
+        if self._answer_generator is not None:
+            self._answer_generator.close()
+            self._answer_generator = None
         if self._store is not None:
             self._store.close()
             self._store = None
@@ -457,3 +547,15 @@ class VideoRAGPipeline:
         for extractor in self._extractors.values():
             extractor.close()
         self._extractors = {}
+
+
+def _as_tuple(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(item.strip() for item in value.split(",") if item.strip())
+    try:
+        return tuple(str(item).strip() for item in value if str(item).strip())  # type: ignore[operator]
+    except TypeError:
+        text = str(value).strip()
+        return (text,) if text else ()

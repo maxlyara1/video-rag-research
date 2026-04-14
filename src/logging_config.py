@@ -19,7 +19,8 @@ def configure_logging(level: int = logging.INFO) -> None:
 
     for noisy_logger in (
         "httpx", "urllib3", "huggingface_hub", "huggingface_hub.utils._http",
-        "safetensors", "easyocr",
+        "safetensors", "easyocr", "google_genai.models", "google_genai.types",
+        "google.genai.models", "google.genai.types", "google.genai._api_client",
     ):
         logging.getLogger(noisy_logger).setLevel(logging.ERROR)
 

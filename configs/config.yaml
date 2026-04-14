@@ -16,8 +16,23 @@ runtime:
 
 query_decoupler:
   enabled: true
+  backend: gemini
   model: Qwen/Qwen3-0.6B
   max_new_tokens: 192
+
+gemini:
+  api_keys: []
+  model_names:
+    - gemini-3-flash-preview
+    - gemini-3.1-flash-lite-preview
+    - gemini-2.5-flash
+  query_model_names: []
+  temperature: 0.2
+  max_output_tokens: 1024
+  timeout_sec: 120
+  minimize_thinking: true
+  flash_thinking_level: minimal
+  flash_25_thinking_budget: 0
 
 asr:
   enabled: true
@@ -41,8 +56,12 @@ det:
 
 indexing:
   collection_prefix: video_rag_research
+  embedding_backend: tei
   embedding_model: Qwen/Qwen3-Embedding-0.6B
+  embedding_dim: 1024
   embedding_max_length: 2048
+  tei_endpoint: http://127.0.0.1:8080
+  tei_timeout_sec: 120
   batch_size: 8
   qdrant_host: localhost
   qdrant_port: 6333
@@ -52,13 +71,23 @@ search:
   per_modality_top_k: 12
   final_top_k: 5
   merge_gap_sec: 6.0
+  score_threshold: 0.3
   modality_weights:
     asr: 1.0
     ocr: 0.8
     det: 0.7
 
 reranker:
-  enabled: true
+  enabled: false
   model: Qwen/Qwen3-Reranker-0.6B
   max_length: 2048
   batch_size: 8
+
+answering:
+  enabled: true
+  provider: gemini
+  max_context_candidates: 5
+  max_video_candidates: 1
+  window_padding_sec: 2.0
+  video_fps: 1.0
+  cleanup_uploaded_files: true
