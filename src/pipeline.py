@@ -284,7 +284,7 @@ class VideoRAGPipeline:
     def build_indexes(self, recreate: bool = False, force: bool = False) -> dict[str, int]:
         videos = self.list_prepared_videos()
         if not videos:
-            raise RuntimeError("Нет подготовленных видео. Сначала запусти prepare_dataset.")
+            raise RuntimeError("Нет подготовленных видео: перед построением индекса требуется выполнить prepare_dataset.")
 
         modalities = self.enabled_modalities()
         total = len(videos)
@@ -425,11 +425,11 @@ class VideoRAGPipeline:
             if record.metadata.get("det_type"):
                 normalized.append(record)
             else:
-                normalized.extend(self._split_legacy_det_record(record))
+                normalized.extend(self._split_det_record_by_type(record))
         return normalized
 
     @staticmethod
-    def _split_legacy_det_record(record: ModalityRecord) -> list[ModalityRecord]:
+    def _split_det_record_by_type(record: ModalityRecord) -> list[ModalityRecord]:
         metadata = record.metadata or {}
         texts: dict[str, str] = {}
 

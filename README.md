@@ -18,6 +18,7 @@
 3. `Integration & Generation`: найденные тексты `A_m`, вопрос и видеофрагмент передаются в LVLM для финального ответа.
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#FFFFFF","primaryColor":"#EEF2FF","primaryBorderColor":"#4F46E5","primaryTextColor":"#0F172A","lineColor":"#64748B","fontFamily":"ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"},"flowchart":{"curve":"linear","nodeSpacing":42,"rankSpacing":56}}}%%
 flowchart TD
     Q[Вопрос Q] --> D[Query Decouple: LVLM P,Q]
     D --> R[R_asr R_det R_type]
