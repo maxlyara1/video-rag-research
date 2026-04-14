@@ -19,25 +19,18 @@
 
 ```mermaid
 flowchart TD
-    Q[Вопрос пользователя Q] --> D[Декомпозиция запроса LVLM]
-    D --> R[R_asr R_det R_type]
+    Q[Вопрос пользователя Q] --> D[Query Decouple LVLM P,Q]
+    D --> R[R = R_asr R_det R_type]
 
-    V[Видео V] --> E[Извлечение вспомогательных текстов]
-    E --> ASR[ASR Whisper речь]
-    E --> OCR[OCR EasyOCR текст на экране]
-    E --> DET[DET Scene Graph объекты]
+    V[Видео V] --> AUX[Auxiliary Text Generation ASR OCR DET]
+    AUX --> DB[DB_asr DB_ocr DB_det]
+    V --> FV[F_v визуальный вход]
 
-    ASR --> DB[Индексы DB_asr DB_ocr DB_det]
-    OCR --> DB
-    DET --> DB
-
-    R --> RET[Retrieval по модальностям и R_type]
+    R --> RET[Retrieval по R и модальным базам]
     DB --> RET
+    RET --> AM[A_m = A_ocr A_asr A_det]
 
-    RET --> AM[A_m найденные вспомогательные тексты]
-    RET --> FV[F_v выбранный видеофрагмент]
-
-    AM --> GEN[Финальный LVLM Q A_m F_v]
+    AM --> GEN[Integration and Generation LVLM F_v Concat A_m,Q]
     FV --> GEN
     GEN --> O[Ответ O с видео и интервалом]
 ```
