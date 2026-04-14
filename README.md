@@ -19,20 +19,21 @@
 
 ```mermaid
 flowchart TD
-    Q[Вопрос пользователя Q] --> D[Query Decouple LVLM P,Q]
-    D --> R[R = R_asr R_det R_type]
+    Q[Вопрос Q] --> D[Query Decouple: LVLM P,Q]
+    D --> R[R_asr R_det R_type]
 
-    V[Видео V] --> AUX[Auxiliary Text Generation ASR OCR DET]
+    V[Видео V] --> AUX[Auxiliary Text Generation]
     AUX --> DB[DB_asr DB_ocr DB_det]
-    V --> FV[F_v визуальный вход]
 
     R --> RET[Retrieval по R и модальным базам]
     DB --> RET
-    RET --> AM[A_m = A_ocr A_asr A_det]
+    RET --> AM[A_m = Concat A_ocr A_asr A_det]
+    RET --> INT[Найденный интервал в видео]
+    INT --> FV[Видеофрагмент F_v]
 
-    AM --> GEN[Integration and Generation LVLM F_v Concat A_m,Q]
+    AM --> GEN[Integration and Generation: LVLM F_v, Concat A_m,Q]
     FV --> GEN
-    GEN --> O[Ответ O с видео и интервалом]
+    GEN --> O[Ответ O]
 ```
 
 Модальности:
@@ -52,7 +53,7 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-Нужен `ffmpeg`:
+Для обработки видео используется `ffmpeg`:
 
 ```bash
 brew install ffmpeg
@@ -62,13 +63,13 @@ brew install ffmpeg
 
 ## Настройка
 
-Создай `.env` из примера:
+Файл `.env` создаётся из примера:
 
 ```bash
 cp .env.example .env
 ```
 
-Минимально нужны:
+Минимальные переменные:
 
 ```env
 GOOGLE_API_KEYS=key_1,key_2
@@ -79,6 +80,41 @@ TEI_ENDPOINT=<tei-embedder-url>
 Ключи Gemini задаются через запятую и перебираются по очереди. Адрес TEI не выводится в логах.
 
 Основной конфиг находится в `configs/config.yaml`.
+
+## TEI
+
+На Mac с Apple Silicon `TEI` запускается на хосте, чтобы эмбеддер использовал `Metal`:
+
+```bash
+brew install text-embeddings-inference
+```
+
+Официальная инструкция для локального `Metal`: [Hugging Face TEI local Metal](https://huggingface.co/docs/text-embeddings-inference/en/local_metal).
+
+```bash
+text-embeddings-router \
+  --model-id Qwen/Qwen3-Embedding-0.6B \
+  --max-batch-tokens 4096 \
+  --max-client-batch-size 64 \
+  --auto-truncate true \
+  --prometheus-port 9001 \
+  --port 8080
+```
+
+Проверка:
+
+```bash
+curl http://127.0.0.1:8080/health
+```
+
+В `.env` указывается тот же адрес:
+
+```env
+EMBEDDING_BACKEND=tei
+TEI_ENDPOINT=http://127.0.0.1:8080
+```
+
+В этом проекте используется один `TEI`-сервис: только для эмбеддингов.
 
 ## Данные
 
@@ -110,7 +146,7 @@ python -m scripts.search --config configs/config.yaml "Где в видео го
 python -m scripts.ask --config configs/config.yaml "Где в видео говорят про роблокс?"
 ```
 
-Показать найденный контекст:
+Вывод найденного контекста:
 
 ```bash
 python -m scripts.ask --config configs/config.yaml --show-context "Где в видео говорят про роблокс?"
