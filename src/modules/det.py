@@ -17,6 +17,10 @@ from src.utils.video_metadata import probe_video_duration
 logger = logging.getLogger(__name__)
 
 
+def _token_key(token: spacy.tokens.Token) -> str:
+    return token.text.lower().strip()
+
+
 @dataclass
 class _DetectedObject:
     node_id: int
@@ -61,18 +65,18 @@ def _build_auxiliary_texts(
 
 def _extract_scene_graph(caption: str, nlp: spacy.language.Language) -> tuple[list[_DetectedObject], dict[str, int], list[_Relation], dict[str, str]]:
     doc = nlp(caption)
-    seen_lemmas: dict[str, int] = {}
+    seen_objects: dict[str, int] = {}
     objects: list[_DetectedObject] = []
     obj_counting: dict[str, int] = {}
     relations: list[_Relation] = []
 
     for token in doc:
         if token.pos_ in ("NOUN", "PROPN") and not token.is_stop:
-            lemma = token.lemma_.lower()
-            obj_counting[lemma] = obj_counting.get(lemma, 0) + 1
-            if lemma not in seen_lemmas:
-                seen_lemmas[lemma] = len(objects)
-                objects.append(_DetectedObject(node_id=len(objects), category=lemma))
+            obj_key = _token_key(token)
+            obj_counting[obj_key] = obj_counting.get(obj_key, 0) + 1
+            if obj_key not in seen_objects:
+                seen_objects[obj_key] = len(objects)
+                objects.append(_DetectedObject(node_id=len(objects), category=obj_key))
 
     for token in doc:
         if token.pos_ == "VERB":
@@ -84,16 +88,16 @@ def _extract_scene_graph(caption: str, nlp: spacy.language.Language) -> tuple[li
                 if child.dep_ in ("dobj", "obj", "attr") and child.pos_ in ("NOUN", "PROPN"):
                     obj = child
             if subject and obj:
-                subject_lemma = subject.lemma_.lower()
-                object_lemma = obj.lemma_.lower()
-                if subject_lemma in seen_lemmas and object_lemma in seen_lemmas:
+                subject_key = _token_key(subject)
+                object_key = _token_key(obj)
+                if subject_key in seen_objects and object_key in seen_objects:
                     relations.append(
                         _Relation(
-                            subject_id=seen_lemmas[subject_lemma],
-                            subject_cat=subject_lemma,
-                            predicate=token.lemma_.lower(),
-                            object_id=seen_lemmas[object_lemma],
-                            object_cat=object_lemma,
+                            subject_id=seen_objects[subject_key],
+                            subject_cat=subject_key,
+                            predicate=_token_key(token),
+                            object_id=seen_objects[object_key],
+                            object_cat=object_key,
                         )
                     )
 

@@ -17,6 +17,31 @@
 2. `Auxiliary Text Generation & Retrieval`: строятся и ищутся вспомогательные тексты по трём модальностям.
 3. `Integration & Generation`: найденные тексты `A_m`, вопрос и видеофрагмент передаются в LVLM для финального ответа.
 
+```mermaid
+flowchart LR
+    Q["Вопрос Q"] --> D["Query Decouple<br/>LVLM(P, Q)"]
+    D --> R["R = {R_asr, R_det, R_type}"]
+
+    V["Видео V"] --> ASR["ASR<br/>Whisper"]
+    V --> OCR["OCR<br/>EasyOCR"]
+    V --> DET["DET<br/>Scene Graph"]
+
+    ASR --> ASRDB["DB_asr"]
+    OCR --> OCRDB["DB_ocr"]
+    DET --> DETDB["DB_det<br/>A_loc / A_cnt / A_rel"]
+
+    R --> RET["Retrieval<br/>по модальностям и R_type"]
+    ASRDB --> RET
+    OCRDB --> RET
+    DETDB --> RET
+
+    RET --> AM["A_m<br/>вспомогательные тексты"]
+    AM --> GEN["Integration & Generation<br/>LVLM(F_v, Concat(A_m, Q))"]
+    V --> GEN
+    Q --> GEN
+    GEN --> O["Ответ O"]
+```
+
 Модальности:
 
 - `ASR`: речь из видео через Whisper.
@@ -39,6 +64,8 @@ python -m spacy download en_core_web_sm
 ```bash
 brew install ffmpeg
 ```
+
+`en_core_web_sm` используется только в `DET`: BLIP выдаёт англоязычные описания кадров, а spaCy разбирает их в scene graph. Русские `ASR` и `OCR` через spaCy не проходят.
 
 ## Настройка
 

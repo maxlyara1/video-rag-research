@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from src.retrieval import Embedder, QdrantStore
 
 
-def _safe_stem(path: Path) -> str:
+def _safe_video_id(path: Path) -> str:
     normalized = unicodedata.normalize("NFKD", path.stem)
     ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
     cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in ascii_name).strip("_")
@@ -223,12 +223,12 @@ class VideoRAGPipeline:
         return extracted
 
     def _copy_video(self, source_path: Path) -> Path:
-        stem = _safe_stem(source_path)
+        video_id = _safe_video_id(source_path)
         suffix = source_path.suffix.lower()
-        destination = self.prepared_videos_dir / f"{stem}{suffix}"
+        destination = self.prepared_videos_dir / f"{video_id}{suffix}"
         counter = 2
         while destination.exists() and destination.stat().st_size != source_path.stat().st_size:
-            destination = self.prepared_videos_dir / f"{stem}_{counter}{suffix}"
+            destination = self.prepared_videos_dir / f"{video_id}_{counter}{suffix}"
             counter += 1
         if not destination.exists():
             shutil.copy2(source_path, destination)

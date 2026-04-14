@@ -52,6 +52,7 @@ det:
   model: Salesforce/blip-image-captioning-base
   frame_step_sec: 5.0
   max_new_tokens: 60
+  # BLIP генерирует английские описания кадров; spaCy используется только для DET scene graph.
   spacy_model: en_core_web_sm
 
 indexing:
