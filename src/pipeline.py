@@ -29,7 +29,7 @@ def _fmt_elapsed(seconds: float) -> str:
 if TYPE_CHECKING:
     from src.generation import GeminiAnswerGenerator, GeminiSettings
     from src.modules.query_decoupler import QueryDecoupler
-    from src.retrieval import Embedder, QdrantStore, Reranker
+    from src.retrieval import Embedder, QdrantStore
 
 
 def _safe_stem(path: Path) -> str:
@@ -55,7 +55,6 @@ class VideoRAGPipeline:
 
         self._embedder: "Embedder | None" = None
         self._store: "QdrantStore | None" = None
-        self._reranker: "Reranker | None" = None
         self._query_decoupler: "QueryDecoupler | object | None" = None
         self._answer_generator: "GeminiAnswerGenerator | None" = None
         self._extractors: dict[str, object] = {}
@@ -101,21 +100,6 @@ class VideoRAGPipeline:
                 embedding_dim=self._get_embedder().dim,
             )
         return self._store
-
-    def _get_reranker(self) -> "Reranker | None":
-        from src.retrieval import Reranker
-
-        if self._reranker is None and self.cfg["reranker"].get("enabled", True):
-            runtime_cfg = self.cfg["runtime"]
-            rerank_cfg = self.cfg["reranker"]
-            self._reranker = Reranker(
-                rerank_cfg["model"],
-                device=runtime_cfg["device"],
-                torch_dtype=runtime_cfg["torch_dtype"],
-                max_length=rerank_cfg.get("max_length", 2048),
-                batch_size=rerank_cfg.get("batch_size", 8),
-            )
-        return self._reranker
 
     def _get_query_decoupler(self) -> "QueryDecoupler | object | None":
         if self._query_decoupler is None and self.cfg["query_decoupler"].get("enabled", True):
@@ -342,6 +326,10 @@ class VideoRAGPipeline:
         self._flush_cache_summary(cached_names, total + 1, total)
         self._close_extractors()
 
+        all_records = {
+            modality: self._records_for_index(modality, records)
+            for modality, records in all_records.items()
+        }
         total_records = sum(len(r) for r in all_records.values())
         logger.info(
             "Этап 1/2 завершён за %s — %d записей",
@@ -400,19 +388,20 @@ class VideoRAGPipeline:
             if not modality_query.strip():
                 continue
             query_vector = embedder.embed_query(modality_query)
-            hits = store.search(modality, query_vector, top_k=top_k)
+            filter_payload = (
+                {"det_type": self._det_type_for_mode(decomposition.det_mode)}
+                if modality == "det"
+                else None
+            )
+            hits = store.search(modality, query_vector, top_k=top_k, filter_payload=filter_payload)
             if score_threshold is not None:
                 hits = [hit for hit in hits if hit.score >= float(score_threshold)]
             all_hits.extend(hits)
 
         candidates = self._merge_hits(all_hits)
         final_top_k = self.cfg["search"].get("final_top_k", 5)
-        reranker = self._get_reranker()
-        if reranker is not None:
-            candidates = reranker.rerank(query, candidates, top_k=final_top_k)
-        else:
-            candidates.sort(key=lambda item: item.score, reverse=True)
-            candidates = candidates[:final_top_k]
+        candidates.sort(key=lambda item: item.score, reverse=True)
+        candidates = candidates[:final_top_k]
         return decomposition, candidates
 
     def answer(self, query: str) -> tuple[QueryDecomposition, list[CandidateWindow], str, str | None, int | None]:
@@ -428,8 +417,71 @@ class VideoRAGPipeline:
     def _build_det_query(self, decomposition: QueryDecomposition) -> str:
         if not decomposition.det_queries:
             return decomposition.original_query
-        parts = decomposition.det_queries + [decomposition.det_mode]
-        return ", ".join(part for part in parts if part)
+        return ", ".join(part for part in decomposition.det_queries if part)
+
+    @staticmethod
+    def _det_type_for_mode(det_mode: str) -> str:
+        if det_mode == "number":
+            return "number"
+        if det_mode == "location":
+            return "location"
+        return "relation"
+
+    def _records_for_index(self, modality: str, records: list[ModalityRecord]) -> list[ModalityRecord]:
+        if modality != "det":
+            return records
+
+        normalized: list[ModalityRecord] = []
+        for record in records:
+            if record.metadata.get("det_type"):
+                normalized.append(record)
+            else:
+                normalized.extend(self._split_legacy_det_record(record))
+        return normalized
+
+    @staticmethod
+    def _split_legacy_det_record(record: ModalityRecord) -> list[ModalityRecord]:
+        metadata = record.metadata or {}
+        texts: dict[str, str] = {}
+
+        counting = metadata.get("counting") or {}
+        if counting:
+            lines = ["Object counting:"]
+            for category, count in counting.items():
+                lines.append(f"- {category}: {count}")
+            texts["number"] = "\n".join(lines)
+
+        objects = metadata.get("objects") or []
+        if objects:
+            lines = ["Detected object locations:"]
+            for index, category in enumerate(objects):
+                lines.append(f"- Object {index} is a {category} located in the sampled frame")
+            texts["location"] = "\n".join(lines)
+
+        relations = metadata.get("relations") or []
+        if relations:
+            lines = ["Object relations:"]
+            for index, relation in enumerate(relations):
+                subject = relation.get("subject", f"object_{index}")
+                predicate = relation.get("predicate", "related_to")
+                obj = relation.get("object", "object")
+                lines.append(f"- {subject} {predicate} {obj}")
+            texts["relation"] = "\n".join(lines)
+
+        if not texts and record.text:
+            texts["relation"] = record.text
+
+        return [
+            ModalityRecord(
+                video_file=record.video_file,
+                modality=record.modality,
+                start=record.start,
+                end=record.end,
+                text=text,
+                metadata={**metadata, "det_type": det_type},
+            )
+            for det_type, text in texts.items()
+        ]
 
     @staticmethod
     def _build_text_retrieval_query(original_query: str, decoupled_query: str | None) -> str:
@@ -530,9 +582,6 @@ class VideoRAGPipeline:
         if self._query_decoupler is not None:
             self._query_decoupler.close()
             self._query_decoupler = None
-        if self._reranker is not None:
-            self._reranker.close()
-            self._reranker = None
         if self._embedder is not None:
             self._embedder.close()
             self._embedder = None

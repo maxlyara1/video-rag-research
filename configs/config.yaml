@@ -77,12 +77,6 @@ search:
     ocr: 0.8
     det: 0.7
 
-reranker:
-  enabled: false
-  model: Qwen/Qwen3-Reranker-0.6B
-  max_length: 2048
-  batch_size: 8
-
 answering:
   enabled: true
   provider: gemini

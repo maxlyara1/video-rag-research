@@ -67,6 +67,8 @@ class QdrantStore:
                 "text": record.text,
                 "metadata": record.metadata,
             }
+            if record.metadata.get("det_type"):
+                payload["det_type"] = record.metadata["det_type"]
             points.append(
                 models.PointStruct(
                     id=_stable_point_id(record),
@@ -86,11 +88,24 @@ class QdrantStore:
         modality: str,
         query_vector: np.ndarray,
         top_k: int,
+        filter_payload: dict[str, object] | None = None,
     ) -> list[SearchHit]:
+        query_filter = None
+        if filter_payload:
+            query_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key=key,
+                        match=models.MatchValue(value=value),
+                    )
+                    for key, value in filter_payload.items()
+                ]
+            )
         hits = self.client.query_points(
             collection_name=self.collection_name(modality),
             query=query_vector.tolist(),
             limit=top_k,
+            query_filter=query_filter,
         ).points
         return [
             SearchHit(

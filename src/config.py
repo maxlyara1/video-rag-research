@@ -39,7 +39,6 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         "EMBEDDING_MODEL": ("indexing", "embedding_model"),
         "EMBEDDING_DIM": ("indexing", "embedding_dim"),
         "TEI_ENDPOINT": ("indexing", "tei_endpoint"),
-        "RERANKER_MODEL": ("reranker", "model"),
         "QUERY_DECOUPLER_MODEL": ("query_decoupler", "model"),
         "QUERY_DECOUPLER_BACKEND": ("query_decoupler", "backend"),
         "GOOGLE_FLASH_THINKING_LEVEL": ("gemini", "flash_thinking_level"),
@@ -87,7 +86,6 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         "GOOGLE_MINIMIZE_THINKING": ("gemini", "minimize_thinking"),
         "ANSWER_GENERATION_ENABLED": ("answering", "enabled"),
         "ANSWER_CLEANUP_UPLOADED_FILES": ("answering", "cleanup_uploaded_files"),
-        "RERANK_ENABLED": ("reranker", "enabled"),
     }
     for env_key, (section, key) in bool_env_map.items():
         value = os.environ.get(env_key)

@@ -46,7 +46,7 @@ class TEIEmbedder:
             or "Given a multilingual user query, retrieve relevant video transcript passages that answer the query."
         )
         self.backend = backend or _detect_backend(model_name)
-        logger.info("Embedder: TEI endpoint=%s model=%s backend=%s", self.endpoint, model_name, self.backend)
+        logger.info("Embedder: TEI model=%s backend=%s", model_name, self.backend)
 
     def _format_query(self, query: str) -> str:
         if self.backend == "e5":
@@ -80,11 +80,10 @@ class TEIEmbedder:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_sec) as response:
                 raw = json.loads(response.read().decode("utf-8"))
-        except urllib.error.URLError as exc:
+        except urllib.error.URLError:
             raise RuntimeError(
-                f"TEI endpoint is unavailable at {self.endpoint}. "
-                "Start it with `text-embeddings-router --model-id Qwen/Qwen3-Embedding-0.6B --port 8080`."
-            ) from exc
+                "TEI endpoint is unavailable. Check TEI_ENDPOINT in .env or configs/config.yaml."
+            ) from None
 
         if not raw:
             return np.empty((0, self.dim), dtype=np.float32)
@@ -138,4 +137,3 @@ class TEIEmbedder:
 
     def close(self) -> None:
         return None
-

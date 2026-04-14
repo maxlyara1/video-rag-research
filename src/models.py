@@ -17,7 +17,13 @@ class ModalityRecord:
     def record_id(self) -> str:
         start_ms = int(round(self.start * 1000))
         end_ms = int(round(self.end * 1000))
-        return f"{self.video_name}:{self.modality}:{start_ms:010d}:{end_ms:010d}"
+        parts = [self.video_name, self.modality]
+        det_type = self.metadata.get("det_type")
+        if det_type:
+            safe_type = "".join(ch if str(ch).isalnum() or ch in {"-", "_"} else "_" for ch in str(det_type))
+            parts.append(safe_type)
+        parts.extend([f"{start_ms:010d}", f"{end_ms:010d}"])
+        return ":".join(parts)
 
     @property
     def video_name(self) -> str:
@@ -64,4 +70,3 @@ class CandidateWindow:
             if texts:
                 parts.append(f"[{modality.upper()}]\n" + "\n".join(texts))
         return "\n\n".join(parts)
-

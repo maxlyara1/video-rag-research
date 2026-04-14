@@ -42,12 +42,12 @@ def _build_auxiliary_texts(
         lines = ["Object counting:"]
         for category, count in obj_counting.items():
             lines.append(f"- {category}: {count}")
-        texts["obj_counting"] = "\n".join(lines)
+        texts["number"] = "\n".join(lines)
     if objects:
-        lines = ["Detected objects:"]
+        lines = ["Detected object locations:"]
         for obj in objects:
-            lines.append(f"- Object {obj.node_id} is a {obj.category}")
-        texts["obj_list"] = "\n".join(lines)
+            lines.append(f"- Object {obj.node_id} is a {obj.category} located in the sampled frame")
+        texts["location"] = "\n".join(lines)
     if relations:
         lines = ["Object relations:"]
         for relation in relations:
@@ -55,7 +55,7 @@ def _build_auxiliary_texts(
                 f"- {relation.subject_cat} ({relation.subject_id}) {relation.predicate} "
                 f"{relation.object_cat} ({relation.object_id})"
             )
-        texts["relations"] = "\n".join(lines)
+        texts["relation"] = "\n".join(lines)
     return texts
 
 
@@ -147,34 +147,33 @@ class SceneGraphDETExtractor:
         for frame in frames:
             caption = self._generate_caption(frame.image.convert("RGB"))
             objects, obj_counting, relations, auxiliary_texts = _extract_scene_graph(caption, self.nlp)
-            text_parts = [caption] + list(auxiliary_texts.values())
-            text = "\n".join(part for part in text_parts if part)
-            results.append(
-                ModalityRecord(
-                    video_file=str(video_path),
-                    modality="det",
-                    start=round(frame.timestamp, 3),
-                    end=round(min(duration, frame.timestamp + self.frame_step_sec), 3),
-                    text=text,
-                    metadata={
-                        "caption": caption,
-                        "objects": [obj.category for obj in objects],
-                        "counting": obj_counting,
-                        "relations": [
-                            {
-                                "subject": rel.subject_cat,
-                                "predicate": rel.predicate,
-                                "object": rel.object_cat,
-                            }
-                            for rel in relations
-                        ],
-                    },
+            base_metadata = {
+                "caption": caption,
+                "objects": [obj.category for obj in objects],
+                "counting": obj_counting,
+                "relations": [
+                    {
+                        "subject": rel.subject_cat,
+                        "predicate": rel.predicate,
+                        "object": rel.object_cat,
+                    }
+                    for rel in relations
+                ],
+            }
+            for det_type, text in auxiliary_texts.items():
+                results.append(
+                    ModalityRecord(
+                        video_file=str(video_path),
+                        modality="det",
+                        start=round(frame.timestamp, 3),
+                        end=round(min(duration, frame.timestamp + self.frame_step_sec), 3),
+                        text=text,
+                        metadata={**base_metadata, "det_type": det_type},
+                    )
                 )
-            )
         return results
 
     def close(self) -> None:
         if hasattr(self, "model"):
             del self.model
         cleanup_torch_memory(self.device)
-

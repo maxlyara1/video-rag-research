@@ -406,7 +406,7 @@ class GeminiAnswerGenerator:
             f"- R_asr: {decomposition.asr_query or 'null'}\n"
             f"- R_det: {decomposition.det_queries}\n"
             f"- R_type: {decomposition.det_mode}\n\n"
-            "Найденные вспомогательные тексты A_m, отсортированные по релевантности и времени:\n"
+            "Найденные вспомогательные тексты A_m, отобранные по релевантности и поданные хронологически:\n"
             f"{context_blocks or 'Нет найденных фрагментов.'}\n\n"
             "Формат ответа:\n"
             "Ответ: <краткий ответ>\n"
@@ -416,7 +416,10 @@ class GeminiAnswerGenerator:
     @staticmethod
     def _format_context_blocks(candidates: list[CandidateWindow]) -> str:
         blocks: list[str] = []
-        for index, candidate in enumerate(candidates, start=1):
+        for index, candidate in enumerate(
+            sorted(candidates, key=lambda item: (item.video_file, item.start, item.end)),
+            start=1,
+        ):
             lines = [
                 f"### Кандидат {index}",
                 f"Видео: {Path(candidate.video_file).name}",
