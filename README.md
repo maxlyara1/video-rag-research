@@ -134,7 +134,7 @@ scripts/build_index.py     построение индексов
 scripts/search.py          поиск по индексам
 scripts/ask.py             поиск и финальный ответ
 src/generation/            Gemini LVLM-стадии
-src/modules/               ASR, OCR, DET, query decouple
+src/modules/               ASR, OCR, DET
 src/retrieval/             эмбеддинги, Qdrant, TEI-клиент
 src/pipeline.py            общий пайплайн
 ```

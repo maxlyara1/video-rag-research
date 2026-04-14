@@ -39,8 +39,6 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         "EMBEDDING_MODEL": ("indexing", "embedding_model"),
         "EMBEDDING_DIM": ("indexing", "embedding_dim"),
         "TEI_ENDPOINT": ("indexing", "tei_endpoint"),
-        "QUERY_DECOUPLER_MODEL": ("query_decoupler", "model"),
-        "QUERY_DECOUPLER_BACKEND": ("query_decoupler", "backend"),
         "GOOGLE_FLASH_THINKING_LEVEL": ("gemini", "flash_thinking_level"),
     }
     for env_key, (section, key) in env_map.items():

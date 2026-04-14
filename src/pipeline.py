@@ -28,7 +28,6 @@ def _fmt_elapsed(seconds: float) -> str:
 
 if TYPE_CHECKING:
     from src.generation import GeminiAnswerGenerator, GeminiSettings
-    from src.modules.query_decoupler import QueryDecoupler
     from src.retrieval import Embedder, QdrantStore
 
 
@@ -55,7 +54,7 @@ class VideoRAGPipeline:
 
         self._embedder: "Embedder | None" = None
         self._store: "QdrantStore | None" = None
-        self._query_decoupler: "QueryDecoupler | object | None" = None
+        self._query_decoupler: object | None = None
         self._answer_generator: "GeminiAnswerGenerator | None" = None
         self._extractors: dict[str, object] = {}
 
@@ -101,26 +100,16 @@ class VideoRAGPipeline:
             )
         return self._store
 
-    def _get_query_decoupler(self) -> "QueryDecoupler | object | None":
+    def _get_query_decoupler(self) -> object | None:
         if self._query_decoupler is None and self.cfg["query_decoupler"].get("enabled", True):
-            runtime_cfg = self.cfg["runtime"]
             decouple_cfg = self.cfg["query_decoupler"]
-            backend = decouple_cfg.get("backend", "local")
+            backend = decouple_cfg.get("backend", "gemini")
             if backend == "gemini":
                 from src.generation import GeminiQueryDecoupler
 
                 self._query_decoupler = GeminiQueryDecoupler(
                     self._gemini_settings(model_names_key="query_model_names"),
                     max_output_tokens=decouple_cfg.get("max_new_tokens", 192),
-                )
-            elif backend == "local":
-                from src.modules.query_decoupler import QueryDecoupler
-
-                self._query_decoupler = QueryDecoupler(
-                    decouple_cfg["model"],
-                    device=runtime_cfg["device"],
-                    torch_dtype=runtime_cfg["torch_dtype"],
-                    max_new_tokens=decouple_cfg.get("max_new_tokens", 192),
                 )
             else:
                 raise ValueError(f"Unknown query_decoupler.backend: {backend}")

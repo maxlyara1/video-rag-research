@@ -17,7 +17,6 @@ runtime:
 query_decoupler:
   enabled: true
   backend: gemini
-  model: Qwen/Qwen3-0.6B
   max_new_tokens: 192
 
 gemini:
