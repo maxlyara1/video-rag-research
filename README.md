@@ -18,28 +18,29 @@
 3. `Integration & Generation`: найденные тексты `A_m`, вопрос и видеофрагмент передаются в LVLM для финального ответа.
 
 ```mermaid
-flowchart LR
-    Q["Вопрос Q"] --> D["Query Decouple<br/>LVLM(P, Q)"]
+flowchart TD
+    Q["Вопрос пользователя Q"] --> D["Декомпозиция запроса: LVLM(P, Q)"]
     D --> R["R = {R_asr, R_det, R_type}"]
+    R --> RET["Поиск по модальностям с учётом R_type"]
 
-    V["Видео V"] --> ASR["ASR<br/>Whisper"]
-    V --> OCR["OCR<br/>EasyOCR"]
-    V --> DET["DET<br/>Scene Graph"]
+    V["Видео V"] --> ASR["Речь: ASR, Whisper"]
+    V --> OCR["Текст на экране: OCR, EasyOCR"]
+    V --> DET["Визуальные объекты: DET, Scene Graph"]
 
-    ASR --> ASRDB["DB_asr"]
-    OCR --> OCRDB["DB_ocr"]
-    DET --> DETDB["DB_det<br/>A_loc / A_cnt / A_rel"]
+    ASR --> ASRDB["Индекс речи DB_asr"]
+    OCR --> OCRDB["Индекс экранного текста DB_ocr"]
+    DET --> DETDB["Индекс объектов DB_det"]
 
-    R --> RET["Retrieval<br/>по модальностям и R_type"]
     ASRDB --> RET
     OCRDB --> RET
     DETDB --> RET
 
-    RET --> AM["A_m<br/>вспомогательные тексты"]
-    AM --> GEN["Integration & Generation<br/>LVLM(F_v, Concat(A_m, Q))"]
-    V --> GEN
+    RET --> FV["Отобранный видеофрагмент F_v"]
+    RET --> AM["Найденные вспомогательные тексты A_m"]
+    AM --> GEN["Финальный LVLM: видеофрагмент, A_m и Q"]
+    FV --> GEN
     Q --> GEN
-    GEN --> O["Ответ O"]
+    GEN --> O["Ответ O с видео и интервалом"]
 ```
 
 Модальности:
