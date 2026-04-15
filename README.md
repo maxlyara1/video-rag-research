@@ -8,6 +8,8 @@
 
 - [Статья Video-RAG, arXiv:2411.13093](https://arxiv.org/abs/2411.13093)
 - [Официальный репозиторий Video-RAG](https://github.com/Leon1207/Video-RAG-master)
+- [Презентация защиты нашего исследования](https://github.com/maxlyara1/video-rag-research/blob/main/research_video_rag.pdf)
+
 
 ## Архитектура
 
