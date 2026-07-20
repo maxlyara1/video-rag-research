@@ -18,11 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m spacy download en_core_web_sm
 
 # Copy project files
-COPY configs/configs.yaml configs/config.yaml
+COPY configs/config.yaml configs/config.yaml
 COPY app.py .
 COPY src/ src/
 COPY static/ static/
-COPY lera_materials/ lera_materials/
+
 
 # Expose API port
 EXPOSE 8000

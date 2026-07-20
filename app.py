@@ -81,9 +81,18 @@ async def ask_query(request: QueryRequest):
         
     try:
         logger.info(f"Processing query: {request.query} on collection: {request.collection_prefix}")
-        decomposition, candidates, answer, model_name, key_index = pipeline.answer(
-            request.query, collection_prefix=request.collection_prefix
-        )
+        try:
+            decomposition, candidates, answer, model_name, key_index = pipeline.answer(
+                request.query, collection_prefix=request.collection_prefix
+            )
+        except Exception as e:
+            logger.warning(f"Generation or decoupling failed ({e}). Falling back to vector-search only.")
+            decomposition, candidates = pipeline.search(
+                request.query, collection_prefix=request.collection_prefix
+            )
+            answer = "Внимание: Генерация текстового ответа недоступна (требуется настроить GOOGLE_API_KEY в файле .env). Ниже представлены результаты поиска по локальной векторной базе Qdrant."
+            model_name = "fallback-search-only"
+            key_index = None
         
         # Serialize candidates for JSON response
         serialized_candidates = []
