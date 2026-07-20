@@ -99,12 +99,14 @@ def run_evaluation(pipeline: VideoRAGPipeline, mode: str) -> dict:
         t_start = time.perf_counter()
         
         # Шаг 1: Декомпозиция (Gemini)
-        query_decoupler = pipeline._get_query_decoupler()
-        decomposition = (
-            query_decoupler.decouple(query)
-            if query_decoupler is not None
-            else QueryDecomposition(original_query=query, asr_query=query, det_queries=[], det_mode="relation")
-        )
+        decomposition = QueryDecomposition(original_query=query, asr_query=query, det_queries=[], det_mode="relation")
+        query_decoupler = None
+        try:
+            query_decoupler = pipeline._get_query_decoupler()
+            if query_decoupler is not None:
+                decomposition = query_decoupler.decouple(query)
+        except Exception as e:
+            print(f"Warning: Gemini decoupler failed ({e}). Using default decomposition.")
         
         # Шаг 2: Поиск в векторной базе (измеряем только локальное время без сети)
         t_qdrant_start = time.perf_counter()
@@ -197,6 +199,7 @@ def run_evaluation(pipeline: VideoRAGPipeline, mode: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Бенчмарк для сравнения ASR-only и гибридного мультимодального поиска")
     parser.add_argument("--config", default="configs/config.yaml")
+    parser.add_argument("--output", default="benchmark_results.md", help="Путь для записи отчета в формате Markdown")
     args = parser.parse_args()
 
     pipeline = VideoRAGPipeline(args.config)
@@ -219,9 +222,29 @@ def main() -> None:
         pipeline.close()
 
     # Запись результатов в markdown файл
-    output_path = Path("/Users/maksimlyara/Documents/notes/Максим/учеба/ИТМО магистратура портфолио/Junior ML Contest 2026 — 3 волна — Video-RAG Research/WORK/benchmark_results.md")
+    output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
+    # Расчет категорийных метрик для динамических выводов
+    def get_cat_hit1(metrics, cat):
+        stats = metrics["category_stats"][cat]
+        return stats["top1"] / stats["total"] if stats["total"] > 0 else 0
+
+    asr_speech_hit1 = get_cat_hit1(asr_metrics, "speech")
+    mm_speech_hit1 = get_cat_hit1(mm_metrics, "speech")
+
+    asr_ocr_total = asr_metrics["category_stats"]["ocr"]["total"]
+    asr_visual_total = asr_metrics["category_stats"]["visual"]["total"]
+    ocr_visual_total = asr_ocr_total + asr_visual_total
+
+    asr_ocr_top1 = asr_metrics["category_stats"]["ocr"]["top1"]
+    asr_visual_top1 = asr_metrics["category_stats"]["visual"]["top1"]
+    asr_ocr_visual_hit1 = (asr_ocr_top1 + asr_visual_top1) / ocr_visual_total if ocr_visual_total > 0 else 0
+
+    mm_ocr_top1 = mm_metrics["category_stats"]["ocr"]["top1"]
+    mm_visual_top1 = mm_metrics["category_stats"]["visual"]["top1"]
+    mm_ocr_visual_hit1 = (mm_ocr_top1 + mm_visual_top1) / ocr_visual_total if ocr_visual_total > 0 else 0
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("# Результаты тестирования поиска по видео (Benchmark)\n\n")
         f.write("Сравнение стратегий поиска: **ASR-only** (только аудиодорожка) против **Multimodal** (ASR + OCR + DET).\n")
@@ -258,10 +281,10 @@ def main() -> None:
             f.write(f"| \"{q}\" | `{cat.upper()}` | `{exp}` | {asr_res} | {mm_res} |\n")
             
         f.write("\n## 4. Анализ и выводы\n\n")
-        f.write("1. **Речевые запросы (`SPEECH`)**: В ситуациях, когда ключевое слово произносится спикером голосом, обе стратегии одинаково точны (Hit@1 = 100%).\n")
-        f.write("2. **Визуальные и OCR-запросы (`VISUAL`, `OCR`)**: ASR-only стратегия показывает нулевую точность (Hit@1 = 0.00%) на запросах, ориентированных на визуальное содержание (текст титров или предметы на заднем плане), так как данные слова не озвучиваются спикерами. Мультимодальный поиск успешно находит целевые видео в 100% случаев благодаря OCR- и DET-индексам.\n")
-        f.write("3. **Влияние на Latency**: Чистое время локального поиска в Qdrant составляет сотые доли секунды. Включение дополнительных индексов OCR и DET незначительно увеличивает время поиска (с 0.015s до 0.025s), что незаметно для пользователя и полностью компенсируется ростом полноты поиска.\n")
-        f.write("4. **Ограничение оценки**: Данный бенчмарк измеряет точность на уровне видеофайлов (video-level retrieval accuracy). Точность временных интервалов (таймкодов) оценена качественно и требует ручной валидации пользователем на MVP.\n")
+        f.write(f"1. **Речевые запросы (`SPEECH`)**: В ситуациях, когда ключевое слово произносится спикером голосом, ASR-only Hit@1 составляет {asr_speech_hit1:.2%}, а Multimodal Hit@1 составляет {mm_speech_hit1:.2%}.\n")
+        f.write(f"2. **Визуальные и OCR-запросы (`VISUAL` и `OCR`)**: ASR-only Hit@1 составляет {asr_ocr_visual_hit1:.2%}, в то время как Multimodal Hit@1 составляет {mm_ocr_visual_hit1:.2%}. Дополнительные OCR и DET признаки действительно содержат уникальную информацию, которая отсутствует в ASR (например, титры и визуальные объекты). Однако простое фиксированное слияние модальностей в текущей версии пайплайна снижает общую точность Hit@1 с {asr_metrics['hit_at_1']:.2%} до {mm_metrics['hit_at_1']:.2%}.\n")
+        f.write(f"3. **Влияние на Latency**: Чистое время локального поиска в Qdrant составляет сотые доли секунды. Включение дополнительных индексов OCR и DET незначительно увеличивает время поиска (с {asr_metrics['avg_qdrant_latency']:.3f}s до {mm_metrics['avg_qdrant_latency']:.3f}s), что незаметно для пользователя и полностью компенсируется потенциалом роста полноты при правильной маршрутизации запросов.\n")
+        f.write("4. **Дальнейшие шаги**: Для улучшения точности мультимодального поиска необходима динамическая классификация/маршрутизация запросов по типам (Query Routing) и динамическое взвешивание вкладов модальностей вместо фиксированного суммирования скоров.\n")
 
     print(f"\nРезультаты сохранены в: {output_path}")
 
