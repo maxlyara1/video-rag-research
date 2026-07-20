@@ -607,12 +607,16 @@ class VideoRAGPipeline:
 
 
     def search(self, query: str, collection_prefix: str | None = None) -> tuple[QueryDecomposition, list[CandidateWindow]]:
-        query_decoupler = self._get_query_decoupler()
-        decomposition = (
-            query_decoupler.decouple(query)
-            if query_decoupler is not None
-            else QueryDecomposition(original_query=query, asr_query=query, det_queries=[], det_mode="relation")
-        )
+        try:
+            query_decoupler = self._get_query_decoupler()
+            decomposition = (
+                query_decoupler.decouple(query)
+                if query_decoupler is not None
+                else QueryDecomposition(original_query=query, asr_query=query, det_queries=[], det_mode="relation")
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize or decouple query with GeminiQueryDecoupler: {e}. Falling back to default decomposition.")
+            decomposition = QueryDecomposition(original_query=query, asr_query=query, det_queries=[], det_mode="relation")
 
         modality_queries = {
             "asr": self._build_text_retrieval_query(query, decomposition.asr_query),
