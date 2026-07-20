@@ -36,9 +36,13 @@ gemini:
 asr:
   enabled: true
   backend: whisper
-  model: small
+  model: turbo
   language: ru
   no_speech_threshold: 0.6
+  initial_prompt: null
+  # Число параллельных процессов для нарезки длинных аудиофайлов.
+  # Рекомендуется установить от 2 до 4 на Apple Silicon для ускорения ASR в 3-4 раза.
+  workers: 2
 
 ocr:
   enabled: true
@@ -81,7 +85,7 @@ answering:
   enabled: true
   provider: gemini
   max_context_candidates: 5
-  max_video_candidates: 1
+  max_video_candidates: 0
   window_padding_sec: 2.0
   video_fps: 1.0
   cleanup_uploaded_files: true

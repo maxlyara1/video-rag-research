@@ -4,8 +4,17 @@ from __future__ import annotations
 import logging
 import warnings
 
+import sys
+
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _CONFIGURED = False
+
+
+class FlushingStreamHandler(logging.StreamHandler):
+    """A standard stream handler that flushes after every log emit to prevent buffering."""
+    def emit(self, record: logging.LogRecord) -> None:
+        super().emit(record)
+        self.flush()
 
 
 def configure_logging(level: int = logging.INFO) -> None:
@@ -15,25 +24,37 @@ def configure_logging(level: int = logging.INFO) -> None:
         return
     _CONFIGURED = True
 
-    logging.basicConfig(level=level, format=_LOG_FORMAT)
+    root = logging.getLogger()
+    root.setLevel(level)
+    
+    # Remove existing handlers to avoid duplicates
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
+    # Use FlushingStreamHandler to ensure logs write instantly
+    handler = FlushingStreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root.addHandler(handler)
 
     for noisy_logger in (
-        "httpx", "urllib3", "huggingface_hub", "huggingface_hub.utils._http",
-        "safetensors", "easyocr", "google_genai.models", "google_genai.types",
+        "httpx", "urllib3", "safetensors", "easyocr", "google_genai.models", "google_genai.types",
         "google.genai.models", "google.genai.types", "google.genai._api_client",
     ):
         logging.getLogger(noisy_logger).setLevel(logging.ERROR)
 
+    # Allow huggingface_hub to print info/warning logs
+    logging.getLogger("huggingface_hub").setLevel(logging.INFO)
+
     try:
         import transformers
-        transformers.logging.set_verbosity_error()
-        transformers.utils.logging.disable_progress_bar()
+        transformers.logging.set_verbosity_info()
+        transformers.utils.logging.enable_progress_bar()
     except (ImportError, AttributeError):
         pass
 
     try:
-        from huggingface_hub import disable_progress_bars
-        disable_progress_bars()
+        from huggingface_hub import enable_progress_bars
+        enable_progress_bars()
     except (ImportError, AttributeError):
         pass
 

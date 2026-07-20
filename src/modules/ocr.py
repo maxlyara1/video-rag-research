@@ -9,9 +9,10 @@ import numpy as np
 import torch
 
 from src.models import ModalityRecord
-from src.runtime import detect_torch_device, is_cuda_device
+from src.runtime import detect_torch_device, is_cuda_device, is_mps_device
 from src.utils.video_frames import RobustVideoFrameSampler
 from src.utils.video_metadata import probe_video_duration
+from src.utils.telemetry import ProgressTelemetry
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +41,36 @@ class EasyOCROnScreenExtractor:
         self.min_confidence = min_confidence
         self.device = detect_torch_device(device)
         logger.info("OCR: загрузка EasyOCR %s на %s...", languages, self.device)
+        
+        gpu_enabled = (
+            (is_cuda_device(self.device) and torch.cuda.is_available()) or
+            (is_mps_device(self.device) and torch.backends.mps.is_available())
+        )
         self.reader = easyocr.Reader(
             languages,
-            gpu=is_cuda_device(self.device) and torch.cuda.is_available(),
+            gpu=gpu_enabled,
             verbose=False,
         )
         self.frame_sampler = RobustVideoFrameSampler(decoder_threads=1)
         logger.info("OCR: модель готова (шаг кадров %.1f сек)", self.frame_step_sec)
 
     def extract(self, video_path: str | Path) -> list[ModalityRecord]:
+        import time
         duration = probe_video_duration(video_path)
         frames = self.frame_sampler.sample_regular_frames(
             video_path,
             max_end=duration,
             frame_step_sec=self.frame_step_sec,
         )
+        total = len(frames)
+        telemetry = ProgressTelemetry(
+            stage_name="ocr",
+            total_items=total,
+            device=str(self.device),
+        )
+
         results: list[ModalityRecord] = []
-        for frame in frames:
+        for idx, frame in enumerate(frames, 1):
             rgb = np.array(frame.image.convert("RGB"))
             processed = _preprocess_for_ocr(rgb)
             raw = self.reader.readtext(processed, detail=1, paragraph=False)
@@ -68,25 +82,26 @@ class EasyOCROnScreenExtractor:
                 top_y = float(bbox[0][1])
                 blocks.append((top_y, clean_text, float(confidence)))
             blocks.sort(key=lambda item: item[0])
-            if not blocks:
-                continue
-
-            full_text = " | ".join(text for _, text, _ in blocks)
-            results.append(
-                ModalityRecord(
-                    video_file=str(video_path),
-                    modality="ocr",
-                    start=round(frame.timestamp, 3),
-                    end=round(min(duration, frame.timestamp + self.frame_step_sec), 3),
-                    text=full_text,
-                    metadata={
-                        "blocks": [
-                            {"text": text, "confidence": round(confidence, 4)}
-                            for _, text, confidence in blocks
-                        ]
-                    },
+            
+            if blocks:
+                full_text = " | ".join(text for _, text, _ in blocks)
+                results.append(
+                    ModalityRecord(
+                        video_file=str(video_path),
+                        modality="ocr",
+                        start=round(frame.timestamp, 3),
+                        end=round(min(duration, frame.timestamp + self.frame_step_sec), 3),
+                        text=full_text,
+                        metadata={
+                            "blocks": [
+                                {"text": text, "confidence": round(confidence, 4)}
+                                for _, text, confidence in blocks
+                            ]
+                        },
+                    )
                 )
-            )
+
+            telemetry.update(idx)
         return results
 
     def close(self) -> None:

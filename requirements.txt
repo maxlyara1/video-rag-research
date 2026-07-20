@@ -21,3 +21,4 @@ torchvision>=0.24.0
 easyocr>=1.7.2
 openai-whisper>=20240930
 spacy>=3.8.0
+python-multipart>=0.0.19

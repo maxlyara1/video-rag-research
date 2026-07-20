@@ -144,16 +144,19 @@ class Embedder:
         if not texts:
             return np.empty((0, self.dim), dtype=np.float32)
 
+        from src.utils.telemetry import ProgressTelemetry
         formatted = [self._format_passage(t) for t in texts]
         total_batches = (len(formatted) + batch_size - 1) // batch_size
-        vectors = [
-            self._encode_batch(batch)
-            for batch in tqdm(
-                self._batched(formatted, batch_size),
-                total=total_batches,
-                desc="Embedding chunks",
-            )
-        ]
+        telemetry = ProgressTelemetry(
+            stage_name="embedding",
+            total_items=total_batches,
+            device=str(self.device),
+        )
+        
+        vectors: list[np.ndarray] = []
+        for idx, batch in enumerate(self._batched(formatted, batch_size), 1):
+            vectors.append(self._encode_batch(batch))
+            telemetry.update(idx)
         return np.vstack(vectors)
 
     def embed_query(self, query: str) -> np.ndarray:
@@ -165,16 +168,19 @@ class Embedder:
         if not queries:
             return np.empty((0, self.dim), dtype=np.float32)
 
+        from src.utils.telemetry import ProgressTelemetry
         formatted = [self._format_query(q) for q in queries]
         total_batches = (len(formatted) + batch_size - 1) // batch_size
-        vectors = [
-            self._encode_batch(batch)
-            for batch in tqdm(
-                self._batched(formatted, batch_size),
-                total=total_batches,
-                desc="Embedding queries",
-            )
-        ]
+        telemetry = ProgressTelemetry(
+            stage_name="embed_queries",
+            total_items=total_batches,
+            device=str(self.device),
+        )
+        
+        vectors: list[np.ndarray] = []
+        for idx, batch in enumerate(self._batched(formatted, batch_size), 1):
+            vectors.append(self._encode_batch(batch))
+            telemetry.update(idx)
         return np.vstack(vectors)
 
     def close(self) -> None:

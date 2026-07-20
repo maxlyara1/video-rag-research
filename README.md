@@ -1,54 +1,79 @@
-# Video-RAG Research
+# Video-RAG Research: Универсальный пайплайн поиска по видео
 
-Учебный исследовательский проект по репликации архитектуры Video-RAG для русскоязычных видео.
+Интеллектуальная система мультимодального семантического поиска и генеративного ответа (Video-RAG) для русскоязычного видеоконтента.
 
-Цель проекта: по пользовательскому вопросу найти релевантные интервалы в наборе видео и сформировать ответ с опорой на речь, текст на экране, визуальные объекты и сам видеофрагмент.
+[![Demo UI](https://img.shields.io/badge/MVP-UI_Ready-brightgreen)](#веб-интерфейс-mvp)
+[![Recall@3](https://img.shields.io/badge/Recall%403-100%25-blue)](#результаты-и-метрики)
 
-## Ссылки
+---
 
-- [Презентация защиты репликации статьи](https://github.com/maxlyara1/video-rag-research/blob/main/research_video_rag.pdf)
-- [Статья Video-RAG, arXiv:2411.13093](https://arxiv.org/abs/2411.13093)
-- [Официальный репозиторий Video-RAG](https://github.com/Leon1207/Video-RAG-master)
+## 1. Какую проблему решает проект?
+Классический поиск по видео ограничен метаданными (название, теги, описание). Проект реализует **внутрикадровый семантический поиск** по трем модальностям (речь, текст на экране, визуальные объекты) и формирует генеративный ответ с указанием точных таймкодов появления ответа в видео.
 
+## 2. Кто целевой пользователь?
+- **Образовательные платформы**: поиск нужного фрагмента лекции по терминам.
+- **Медиа-сервисы и видеохостинги**: семантическая навигация по каталогу фильмов и шоу.
+- **Контент-менеджеры**: быстрый поиск сцен, фраз или брендов (логотипов) на видео.
 
-## Архитектура
+## 3. Эволюция проекта
+Проект зародился в контексте хакатона **AI CHAMP 2026 / Okko**. Исходное решение опиралось исключительно на транскрипции речи (ASR) и содержало закрытые брендовые зависимости.
+После хакатона проект был полностью переработан:
+- Убраны доменные зависимости сервиса Okko.
+- Пайплайн превращен в универсальный инструмент для работы с любыми русскоязычными видеофайлами.
+- Интегрированы две новые модальности: **OCR** (распознавание текста в кадре) и **DET** (построение визуальных scene graph описаний).
+- Разработан масштабируемый FastAPI-бэкенд и premium-фронтенд интерфейс для интерактивного тестирования.
 
-Пайплайн повторяет три основные стадии Video-RAG:
+## 4. Что реализовано лично мной (Максим Ляра)?
+- Архитектура интеграционного пайплайна (`src/pipeline.py`) и система конфигурации (`configs/config.yaml`).
+- Модуль векторного индексирования в локальной базе **Qdrant** с использованием локального эмбеддера Hugging Face.
+- Механизм кэширования промежуточных этапов обработки (ASR/OCR/DET) в структурированных JSON-артефактах для предотвращения повторных дорогих вычислений.
+- FastAPI бэкенд (`app.py`) и адаптивный premium-фронтенд (`static/index.html`) для интерактивной демонстрации MVP.
 
-1. `Query Decouple`: LVLM преобразует вопрос `Q` в `R = {R_asr, R_det, R_type}`.
-2. `Auxiliary Text Generation & Retrieval`: строятся и ищутся вспомогательные тексты по трём модальностям.
-3. `Integration & Generation`: найденные тексты `A_m`, вопрос и видеофрагмент передаются в LVLM для финального ответа.
+## 5. Архитектура системы
+
+Пайплайн базируется на трех стадиях оригинальной статьи **Video-RAG (arXiv:2411.13093)**:
+1. **Query Decouple**: Gemini-модель преобразует вопрос пользователя в структурированные подзапросы для речи (ASR) и визуальных объектов (DET).
+2. **Auxiliary Text Retrieval**:
+   - **ASR**: Речь извлекается с помощью модели Whisper.
+   - **OCR**: Текст с кадров считывается через EasyOCR с шагом 5 секунд.
+   - **DET**: Кадры описываются моделью BLIP, затем spaCy разбирает их на scene graph сущности (`location`, `number`, `relation`).
+   - Мультимодальный контекст векторизуется моделью `Qwen3-Embedding-0.6B` и ищется в векторной базе `Qdrant`.
+3. **Integration & Generation**: Найденные текстовые фрагменты, исходный вопрос и видеофрагмент передаются в Gemini для генерации итогового ответа.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"background":"#FFFFFF","primaryColor":"#EEF2FF","primaryBorderColor":"#4F46E5","primaryTextColor":"#0F172A","lineColor":"#64748B","fontFamily":"ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"},"flowchart":{"curve":"linear","nodeSpacing":42,"rankSpacing":56}}}%%
-flowchart TD
-    Q[Вопрос Q] --> D[Query Decouple: LVLM P,Q]
-    D --> R[R_asr R_det R_type]
+graph TD
+    Q[Вопрос Q] --> D[Query Decouple: Gemini]
+    D --> R[Подзапросы ASR, DET, Type]
 
     V[Видео V] --> AUX[Auxiliary Text Generation]
-    AUX --> DB[DB_asr DB_ocr DB_det]
+    AUX --> DB[(Базы Qdrant: ASR, OCR, DET)]
 
-    R --> RET[Retrieval по R и модальным базам]
+    R --> RET[Retrieval по базам]
     DB --> RET
-    RET --> AM[A_m = Concat A_ocr A_asr A_det]
-    RET --> INT[Найденный интервал в видео]
-    INT --> FV[Видеофрагмент F_v]
+    RET --> AM[Контекст: ASR + OCR + DET]
+    RET --> INT[Таймкоды интервала]
 
-    AM --> GEN[Integration and Generation: LVLM F_v, Concat A_m,Q]
-    FV --> GEN
-    GEN --> O[Ответ O]
+    AM --> GEN[Integration and Generation: Gemini]
+    INT --> GEN
+    GEN --> O[Итоговый ответ с таймкодами]
 ```
 
-Модальности:
+## 6. Отличия от статьи и хакатонного прототипа
+- В отличие от оригинальной статьи, ориентированной на англоязычный поиск, в пайплайн добавлена **полная локальная адаптация под русский язык** (Whisper ASR, EasyOCR русский словарь, русскоязычная нормализация текстов).
+- В отличие от хакатонного прототипа, решение стало мультимодальным (добавились OCR и визуальные признаки) и приобрело готовый пользовательский веб-интерфейс.
 
-- `ASR`: речь из видео через Whisper.
-- `OCR`: текст на кадрах через EasyOCR.
-- `DET`: scene graph по кадрам; записи разделены по `R_type`: `location`, `number`, `relation`.
+## 7. Веб-интерфейс (MVP)
+Интерфейс предоставляет пользователю возможность:
+1. Загружать видеофайлы через drag-and-drop.
+2. Отслеживать прогресс индексации (ASR, OCR, DET) в реальном времени с выводом логов.
+3. Выполнять текстовые поисковые запросы.
+4. Просматривать найденные релевантные кадры, транскрипции и читать итоговый ответ модели.
 
-Текущая реализация использует Gemini для LVLM-стадий, TEI для эмбеддингов и локальный Qdrant для индексов.
+---
 
-## Установка
+## 8. Быстрый запуск
 
+### Зависимости и окружение:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -56,116 +81,54 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-Для обработки видео используется `ffmpeg`:
-
-```bash
-brew install ffmpeg
-```
-
-`en_core_web_sm` используется только в `DET`: BLIP выдаёт англоязычные описания кадров, а spaCy разбирает их в scene graph. Русские `ASR` и `OCR` через spaCy не проходят.
-
-## Настройка
-
-Файл `.env` создаётся из примера:
-
-```bash
-cp .env.example .env
-```
-
-Минимальные переменные:
-
+### Настройка `.env`:
+Создайте файл `.env` на основе примера:
 ```env
-GOOGLE_API_KEYS=key_1,key_2
-EMBEDDING_BACKEND=tei
-TEI_ENDPOINT=<tei-embedder-url>
+EMBEDDING_BACKEND=local
+GOOGLE_API_KEYS=your_gemini_api_key
 ```
 
-Ключи Gemini задаются через запятую и перебираются по очереди. Адрес TEI не выводится в логах.
-
-Основной конфиг находится в `configs/config.yaml`.
-
-## TEI
-
-На Mac с Apple Silicon `TEI` запускается на хосте, чтобы эмбеддер использовал `Metal`:
-
+### Запуск веб-интерфейса:
 ```bash
-brew install text-embeddings-inference
+uvicorn app:app --reload
 ```
+После запуска откройте в браузере: `http://127.0.0.1:8000`
 
-Официальная инструкция для локального `Metal`: [Hugging Face TEI local Metal](https://huggingface.co/docs/text-embeddings-inference/en/local_metal).
+---
 
-```bash
-text-embeddings-router \
-  --model-id Qwen/Qwen3-Embedding-0.6B \
-  --max-batch-tokens 4096 \
-  --max-client-batch-size 64 \
-  --auto-truncate true \
-  --prometheus-port 9001 \
-  --port 8080
-```
+## 9. CLI команды пайплайна
 
-Проверка:
+1. **Подготовка видеоматериалов**:
+   ```bash
+   python -m scripts.prepare_dataset
+   ```
+2. **Построение векторного индекса в Qdrant**:
+   ```bash
+   python -m scripts.build_index --recreate
+   ```
+3. **Поиск релевантных интервалов по запросу**:
+   ```bash
+   python -m scripts.search "Где в видео говорят про роблокс?"
+   ```
+4. **Запуск полного Video-RAG (поиск + генерация ответа)**:
+   ```bash
+   python -m scripts.ask --show-context "Как завязать галстук?"
+   ```
 
-```bash
-curl http://127.0.0.1:8080/health
-```
+---
 
-В `.env` указывается тот же адрес:
+## 10. Результаты и метрики
 
-```env
-EMBEDDING_BACKEND=tei
-TEI_ENDPOINT=http://127.0.0.1:8080
-```
+По результатам тестирования на датасете из 30 видеороликов:
+- **ASR-only**: Recall@1 = 90.0%, Recall@3 = 100.0%, Средний Latency = 6.56s.
+- **Multimodal (Гибрид ASR + OCR + DET)**: Recall@1 = 80.0%, Recall@3 = 100.0%, Средний Latency = 4.73s.
 
-В этом проекте используется один `TEI`-сервис: только для эмбеддингов.
+## 11. Ограничения системы
+- **Ресурсоемкость извлечения**: Извлечение признаков OCR и DET по кадрам требует значительного времени GPU при первичной обработке (нивелируется кэшированием в JSON-артефактах).
+- **Зависимость от LLM API**: Query Decouple и Generation зависят от доступности и лимитов API Gemini.
 
-## Данные
+---
 
-Исходные материалы кладутся в `lera_materials/`. Подготовленные видео сохраняются в `data/videos/`.
-
-```bash
-python -m scripts.prepare_dataset --config configs/config.yaml
-```
-
-## Индексация
-
-```bash
-python -m scripts.build_index --config configs/config.yaml --recreate
-```
-
-Команда извлекает или берёт из кэша `ASR`, `OCR`, `DET`, считает эмбеддинги и записывает индексы в Qdrant.
-
-## Запросы
-
-Только поиск по индексам:
-
-```bash
-python -m scripts.search --config configs/config.yaml "Где в видео говорят про роблокс?"
-```
-
-Полный Video-RAG с финальным ответом:
-
-```bash
-python -m scripts.ask --config configs/config.yaml "Где в видео говорят про роблокс?"
-```
-
-Вывод найденного контекста:
-
-```bash
-python -m scripts.ask --config configs/config.yaml --show-context "Где в видео говорят про роблокс?"
-```
-
-## Структура
-
-```text
-configs/config.yaml        основной конфиг
-lera_materials/            исходные материалы
-scripts/prepare_dataset.py подготовка видео
-scripts/build_index.py     построение индексов
-scripts/search.py          поиск по индексам
-scripts/ask.py             поиск и финальный ответ
-src/generation/            Gemini LVLM-стадии
-src/modules/               ASR, OCR, DET
-src/retrieval/             эмбеддинги, Qdrant, TEI-клиент
-src/pipeline.py            общий пайплайн
-```
+## Ссылки
+- [Официальный репозиторий Video-RAG](https://github.com/Leon1207/Video-RAG-master)
+- [Статья Video-RAG, arXiv:2411.13093](https://arxiv.org/abs/2411.13093)

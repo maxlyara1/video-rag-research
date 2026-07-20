@@ -1,0 +1,2452 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интеллектуальный поиск по видео</title>
+    <!-- Premium Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #04060c;
+            --panel-bg: rgba(10, 14, 28, 0.4);
+            --panel-border: rgba(255, 255, 255, 0.05);
+            --primary-glow: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            --accent-purple: #bd93f9;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-cyan: #06b6d4;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --shadow-glow: 0 0 40px rgba(0, 242, 254, 0.08);
+            
+            /* High-fidelity color palettes for modalities */
+            --speech-bg: rgba(189, 147, 249, 0.05);
+            --speech-border: rgba(189, 147, 249, 0.2);
+            --speech-text: #c084fc;
+            
+            --slide-bg: rgba(16, 185, 129, 0.05);
+            --slide-border: rgba(16, 185, 129, 0.2);
+            --slide-text: #34d399;
+            
+            --visual-bg: rgba(245, 158, 11, 0.05);
+            --visual-border: rgba(245, 158, 11, 0.2);
+            --visual-text: #fbbf24;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 0% 0%, rgba(0, 242, 254, 0.04) 0%, transparent 40%),
+                radial-gradient(circle at 100% 0%, rgba(189, 147, 249, 0.03) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(5, 7, 18, 1) 0%, var(--bg-color) 100%);
+        }
+
+        header {
+            padding: 1.25rem 3rem;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(4, 6, 12, 0.8);
+            backdrop-filter: blur(20px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .logo-glow {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--primary-glow);
+            box-shadow: 0 0 12px #00f2fe, 0 0 24px #00f2fe;
+            animation: pulse 2.5s infinite ease-in-out;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.02);
+            padding: 0.45rem 1.1rem;
+            border-radius: 30px;
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(10px);
+            font-weight: 555;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        main {
+            flex: 1;
+            max-width: 1560px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem 3rem 4rem 3rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Search Section */
+        .search-container {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            padding: 1.5rem;
+            backdrop-filter: blur(30px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .search-container::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px; bottom: -1px;
+            border-radius: 24px;
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.1), transparent, rgba(189, 147, 249, 0.1));
+            z-index: -1;
+            pointer-events: none;
+            opacity: 0.5;
+            transition: opacity 0.4s;
+        }
+
+        .search-container:focus-within {
+            box-shadow: var(--shadow-glow);
+            border-color: rgba(0, 242, 254, 0.2);
+        }
+
+        .search-box {
+            display: flex;
+            gap: 0.75rem;
+            background: rgba(3, 5, 13, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 0.45rem;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(0, 242, 254, 0.15);
+            background: rgba(3, 5, 13, 0.6);
+        }
+
+        .search-icon-inline {
+            color: var(--text-muted);
+            margin-left: 0.75rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-box:focus-within .search-icon-inline {
+            color: #00f2fe;
+        }
+
+        .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 0.8rem 0.5rem;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 1.05rem;
+            outline: none;
+            user-select: text;
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+        }
+
+        .search-btn {
+            background: var(--primary-glow);
+            border: none;
+            border-radius: 12px;
+            color: #02040a;
+            font-weight: 700;
+            font-size: 0.95rem;
+            padding: 0.85rem 2rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.15);
+        }
+
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 242, 254, 0.35);
+        }
+
+        .search-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            padding-left: 0.25rem;
+        }
+
+        .suggestion-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-right: 0.3rem;
+            font-weight: 500;
+        }
+
+        .suggestion-chip {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--panel-border);
+            padding: 0.4rem 1rem;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .suggestion-chip:hover {
+            background: rgba(0, 242, 254, 0.05);
+            border-color: rgba(0, 242, 254, 0.25);
+            color: #00f2fe;
+            transform: translateY(-1px);
+        }
+
+        /* Results Layout System */
+        .results-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .results-layout.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Top Row Split */
+        .primary-row {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .primary-row:has(#videoPlayerPanel[style*="display: none"]) {
+            grid-template-columns: 1fr;
+        }
+
+        /* Split Lower Row */
+        .auxiliary-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            align-items: start;
+            border-top: 1px dashed rgba(255, 255, 255, 0.05);
+            padding-top: 2rem;
+        }
+
+        @media (max-width: 1100px) {
+            .primary-row, .auxiliary-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Panel Styling */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            backdrop-filter: blur(35px);
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .panel-header {
+            padding: 1.25rem 1.75rem;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.01);
+            position: relative;
+            z-index: 2;
+        }
+
+        .panel-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-main);
+        }
+
+        .panel-subtitle {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.03);
+            padding: 0.25rem 0.75rem;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.02);
+            font-weight: 600;
+        }
+
+        .panel-body {
+            padding: 1.75rem;
+            overflow-y: auto;
+            max-height: 75vh;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Ambient Glow Video Wrapper */
+        .video-ambient-glow {
+            position: relative;
+            border-radius: 20px;
+            background: #000;
+        }
+
+        /* Video Container & Fullscreen Vendor-Prefixed Logic */
+        .video-container {
+            width: 100%;
+            position: relative;
+            background: #000;
+            aspect-ratio: 16/9;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Scale perfectly when full-screened (standard & webkit vendors) */
+        .video-container:fullscreen,
+        .video-container:-webkit-full-screen,
+        .video-container:-moz-full-screen,
+        .video-container:-ms-fullscreen {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            aspect-ratio: auto !important;
+            background: #000 !important;
+        }
+
+        .video-container:fullscreen video,
+        .video-container:-webkit-full-screen video,
+        .video-container:-moz-full-screen video,
+        .video-container:-ms-fullscreen video {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            object-fit: contain !important;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* YouTube-style controls overlay */
+        .custom-video-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.4) 75%, transparent 100%);
+            display: flex;
+            align-items: center;
+            padding: 1.75rem 1.5rem 0.75rem 1.5rem;
+            gap: 14px;
+            z-index: 10;
+            opacity: 0;
+            transform: translateY(5px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .control-btn {
+            background: transparent;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            padding: 0.4rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            color: #00f2fe;
+            background: rgba(255, 255, 255, 0.06);
+            transform: scale(1.05);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .time-display {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            min-width: 110px;
+            text-align: center;
+        }
+
+        /* Highly magnetic, generous timeline click area (YouTube style) */
+        .progress-bar-container {
+            position: absolute;
+            top: -12px;
+            left: 0;
+            right: 0;
+            height: 24px; /* Tall invisible hit area, easy targeting! */
+            cursor: pointer;
+            z-index: 25;
+            display: flex;
+            align-items: center;
+        }
+
+        .progress-bar-track {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.25);
+            position: relative;
+            transition: height 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-bar-container:hover .progress-bar-track {
+            height: 8px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0;
+            background: var(--primary-glow);
+            position: absolute;
+            left: 0;
+            top: 0;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
+        }
+
+        .progress-bar-handle {
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translate(-50%, -50%) scale(0);
+            box-shadow: 0 0 8px rgba(0,0,0,0.6);
+            transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-bar-container:hover .progress-bar-handle {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        /* Time Preview Tooltip on Scrubber Hover */
+        .hover-time-tooltip {
+            position: absolute;
+            bottom: 20px;
+            transform: translateX(-50%);
+            background: rgba(10, 14, 28, 0.92);
+            border: 1px solid rgba(0, 242, 254, 0.35);
+            padding: 0.35rem 0.65rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-family: inherit;
+            color: #00f2fe;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 100;
+            white-space: nowrap;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            left: 0;
+        }
+
+        /* Volume controls */
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .volume-slider {
+            width: 0;
+            opacity: 0;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            outline: none;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: width 0.25s, opacity 0.25s;
+            -webkit-appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-runnable-track {
+            background: rgba(255,255,255,0.15);
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            background: #00f2fe;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-top: -3px;
+            box-shadow: 0 0 5px #00f2fe;
+        }
+
+        .volume-container:hover .volume-slider {
+            width: 65px;
+            opacity: 1;
+        }
+
+        /* Detailed Answer Formatting */
+        .answer-content {
+            font-size: 1rem;
+            line-height: 1.75;
+            color: var(--text-main);
+            user-select: text;
+        }
+
+        .answer-content p {
+            margin-bottom: 0.95rem;
+        }
+
+        .answer-content strong {
+            color: #ffffff;
+            font-weight: 700;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(0, 242, 254, 0.05) 100%);
+            border-bottom: 2px solid rgba(16, 185, 129, 0.3);
+            padding: 0.05rem 0.25rem;
+            border-radius: 4px;
+        }
+
+        .answer-content ul {
+            margin: 0.6rem 0 1.1rem 1.1rem;
+            list-style-type: none;
+        }
+
+        .answer-content li {
+            margin-bottom: 0.55rem;
+            position: relative;
+            padding-left: 1.25rem;
+        }
+
+        .answer-content li::before {
+            content: "✦";
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: var(--accent-green);
+            font-weight: bold;
+            text-shadow: 0 0 4px var(--accent-green);
+        }
+
+        .highlight-word {
+            background: rgba(245, 158, 11, 0.12);
+            color: #fbbf24;
+            text-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+            border-radius: 4px;
+            padding: 0.05rem 0.35rem;
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            font-weight: 600;
+        }
+
+        .action-icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 8px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-icon-btn:hover {
+            color: #00f2fe;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        /* Timeline Moment Container */
+        .candidates-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .candidate-card {
+            border: 1px solid var(--panel-border);
+            background: rgba(255, 255, 255, 0.015);
+            border-radius: 20px;
+            overflow: hidden;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        }
+
+        .candidate-card:hover {
+            border-color: rgba(0, 242, 254, 0.2);
+            background: rgba(255, 255, 255, 0.025);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+        }
+
+        .candidate-header {
+            background: rgba(255, 255, 255, 0.01);
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .candidate-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .candidate-body {
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        /* Premium play badges */
+        .seek-badge {
+            background: rgba(6, 182, 212, 0.06);
+            border: 1px solid rgba(6, 182, 212, 0.25);
+            color: #22d3ee;
+            padding: 0.35rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .seek-badge::before {
+            content: "▶";
+            font-size: 0.65rem;
+            opacity: 0.8;
+        }
+
+        .seek-badge:hover {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: #00f2fe;
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.3);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        /* Gorgeous Structured Fact Item */
+        .hit-item {
+            background: rgba(5, 7, 18, 0.3);
+            padding: 1.25rem;
+            border-radius: 16px;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            user-select: text;
+            border: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            transition: all 0.25s;
+        }
+
+        .hit-item.hit-asr { border-left: 4px solid var(--accent-purple); }
+        .hit-item.hit-ocr { border-left: 4px solid var(--accent-green); }
+        .hit-item.hit-det { border-left: 4px solid var(--accent-yellow); }
+
+        .hit-item:hover {
+            border-color: rgba(255, 255, 255, 0.08);
+            background: rgba(5, 7, 18, 0.45);
+        }
+
+        .hit-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            padding-bottom: 0.6rem;
+        }
+
+        .modality-badge {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .modality-badge.asr {
+            background: var(--speech-bg);
+            color: var(--speech-text);
+            border: 1px solid var(--speech-border);
+        }
+
+        .modality-badge.ocr {
+            background: var(--slide-bg);
+            color: var(--slide-text);
+            border: 1px solid var(--slide-border);
+        }
+
+        .modality-badge.det {
+            background: var(--visual-bg);
+            color: var(--visual-text);
+            border: 1px solid var(--visual-border);
+        }
+
+        .hit-text {
+            color: var(--text-main);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* Custom structured grid for parsed OCR tag dashboards */
+        .ocr-grid-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            width: 100%;
+        }
+
+        .ocr-tags-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.75rem;
+            width: 100%;
+        }
+
+        .ocr-glass-chip {
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-main);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.01);
+        }
+
+        .ocr-glass-chip:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .ocr-kv-box {
+            background: rgba(6, 182, 212, 0.02);
+            border: 1px solid rgba(6, 182, 212, 0.1);
+            border-radius: 12px;
+            padding: 0.6rem 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            transition: all 0.2s;
+        }
+
+        .ocr-kv-box:hover {
+            border-color: rgba(6, 182, 212, 0.2);
+            background: rgba(6, 182, 212, 0.03);
+        }
+
+        .ocr-kv-label {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .ocr-kv-value {
+            font-size: 0.82rem;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        /* Highly stable premium pulse breathing animation for the loading panel */
+        .loading-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 4.5rem 2rem;
+            gap: 1.25rem;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            backdrop-filter: blur(35px);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.3);
+            animation: containerPulse 3.5s infinite ease-in-out;
+        }
+
+        .loader-ring {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 242, 254, 0.05);
+            border-top: 3px solid #00f2fe;
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.15);
+            position: relative;
+            z-index: 2;
+        }
+
+        .loading-text {
+            font-size: 1.05rem;
+            color: var(--text-main);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            animation: pulse-text 2s infinite ease-in-out;
+            position: relative;
+            z-index: 2;
+        }
+
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 100%;
+            max-width: 320px;
+            margin-top: 0.5rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.22);
+            background: rgba(0, 0, 0, 0.15);
+            padding: 0.45rem 0.85rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.01);
+            transition: all 0.3s;
+        }
+
+        .progress-step.active {
+            color: #00f2fe;
+            border-color: rgba(0, 242, 254, 0.12);
+            background: rgba(0, 242, 254, 0.02);
+        }
+
+        .progress-step.active .step-dot {
+            background-color: #00f2fe;
+            box-shadow: 0 0 8px #00f2fe;
+        }
+
+        .progress-step.done {
+            color: var(--accent-green);
+            border-color: rgba(16, 185, 129, 0.12);
+            background: rgba(16, 185, 129, 0.02);
+        }
+
+        .progress-step.done .step-dot {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        .step-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.08);
+            transition: all 0.3s;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 242, 254, 0.15);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; box-shadow: 0 0 8px #00f2fe; }
+            50% { opacity: 1; box-shadow: 0 0 20px #00f2fe; }
+            100% { opacity: 0.5; box-shadow: 0 0 8px #00f2fe; }
+        }
+
+        @keyframes pulse-text {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes containerPulse {
+            0%, 100% {
+                border-color: rgba(255, 255, 255, 0.05);
+                box-shadow: 0 20px 45px rgba(0, 0, 0, 0.2);
+            }
+            50% {
+                border-color: rgba(0, 242, 254, 0.15);
+                box-shadow: 0 20px 45px rgba(0, 242, 254, 0.05);
+            }
+        }
+        /* Collection tabs styles */
+        .collection-tabs {
+            display: flex;
+            gap: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 0.6rem 1.25rem;
+            border-radius: 12px;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .tab-btn:hover {
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.03);
+            transform: translateY(-1px);
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 242, 254, 0.08);
+            border-color: rgba(0, 242, 254, 0.3);
+            color: #00f2fe;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.1);
+        }
+
+        .upload-zone {
+            border: 2.5px dashed rgba(0, 242, 254, 0.2);
+            border-radius: 18px;
+            padding: 2.25rem 1.5rem;
+            text-align: center;
+            background: rgba(3, 5, 13, 0.15);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.65rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #00f2fe;
+            background: rgba(0, 242, 254, 0.04);
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.08);
+        }
+
+        .upload-icon {
+            color: var(--accent-cyan);
+            animation: bounce 2s infinite ease-in-out;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .custom-file-card {
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 14px;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.01);
+            transition: all 0.25s;
+            overflow: hidden;
+        }
+
+        .custom-file-card:hover {
+            border-color: rgba(0, 242, 254, 0.15);
+            background: rgba(255, 255, 255, 0.025);
+            transform: translateY(-1px);
+        }
+
+        /* 2026-style custom index progress sub-steps */
+        .indexing-steps-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 1.25rem;
+        }
+
+        .sub-step {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 14px;
+            padding: 0.75rem 1.1rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .sub-step.active {
+            border-color: rgba(0, 242, 254, 0.25);
+            background: rgba(0, 242, 254, 0.02);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.04);
+            transform: scale(1.005);
+        }
+
+        .sub-step.done {
+            border-color: rgba(16, 185, 129, 0.25);
+            background: rgba(16, 185, 129, 0.02);
+        }
+
+        .sub-step-icon {
+            font-size: 1.15rem;
+            margin-right: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .sub-step-name {
+            font-size: 0.84rem;
+            font-weight: 550;
+            color: var(--text-main);
+            flex: 1;
+        }
+
+        .sub-step-status {
+            font-size: 0.76rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            padding: 0.2rem 0.7rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sub-step.active .sub-step-status {
+            background: rgba(0, 242, 254, 0.08);
+            color: #00f2fe;
+            border-color: rgba(0, 242, 254, 0.25);
+            animation: pulse-border 1.5s infinite ease-in-out;
+        }
+
+        .sub-step.done .sub-step-status {
+            background: rgba(16, 185, 129, 0.08);
+            color: var(--accent-green);
+            border-color: rgba(16, 185, 129, 0.25);
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(0, 242, 254, 0.25); box-shadow: 0 0 5px rgba(0, 242, 254, 0.1); }
+            50% { border-color: rgba(0, 242, 254, 0.6); box-shadow: 0 0 12px rgba(0, 242, 254, 0.25); }
+        }
+
+        #videoPlayerPanel {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background: rgba(9, 13, 22, 0.97) !important;
+            border-color: rgba(255, 255, 255, 0.08) !important;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-section">
+            <div class="logo-glow"></div>
+            <h1>Интеллектуальный поиск по видео</h1>
+        </div>
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            <span>Система готова к работе</span>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- Search Controls -->
+        <section class="search-container">
+            <!-- Collection Tab Switcher -->
+            <div class="collection-tabs">
+                <button class="tab-btn active" id="tabMain" onclick="switchTab('main')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.3rem;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                    <span>Основная база (3.32 ч)</span>
+                </button>
+                <button class="tab-btn" id="tabCustom" onclick="switchTab('custom')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.3rem;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span id="customTabTitle">Моя коллекция</span>
+                </button>
+            </div>
+
+            <div class="search-box">
+                <div class="search-icon-inline">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
+                <input type="text" id="queryInput" class="search-input" placeholder="Введите поисковый вопрос по видеозаписи..." autofocus autocomplete="off">
+                <button id="searchBtn" class="search-btn">
+                    <span>Искать</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </button>
+            </div>
+
+            <!-- Main suggestions (shown only on main collection) -->
+            <div class="search-suggestions" id="mainSuggestions">
+                <span class="suggestion-label">Быстрый запуск:</span>
+                <div class="suggestion-chip" onclick="fillQuery('О чём это видео?')">О чём это видео?</div>
+                <div class="suggestion-chip" onclick="fillQuery('Краткий пересказ содержания')">Краткий пересказ содержания</div>
+                <div class="suggestion-chip" onclick="fillQuery('Основные темы и тезисы')">Основные темы и тезисы</div>
+                <div class="suggestion-chip" onclick="fillQuery('Каковы главные выводы автора?')">Главные выводы автора</div>
+            </div>
+
+            <!-- Upload & Custom Index Area (Hidden by default, shown when custom tab active) -->
+            <div id="customIndexArea" style="display: none; flex-direction: column; gap: 1.25rem; margin-top: 0.5rem;">
+                <div class="upload-zone" id="dropZone" onclick="triggerFileSelect()">
+                    <svg class="upload-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-main);">Перетащите видеофайлы сюда или нажмите для выбора</div>
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Поддерживаются форматы MP4, MKV, AVI, WebM</div>
+                    <input type="file" id="fileInput" multiple accept="video/*" style="display: none;" onchange="handleFileSelect(event)">
+                </div>
+
+                <!-- Custom Index Upload Progress -->
+                <div id="uploadProgressContainer" style="display: none; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.03); border-radius: 16px; padding: 1.25rem; flex-direction: column; gap: 0.85rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span id="uploadStatusText" style="font-size: 0.88rem; font-weight: 600; color: #00f2fe;">Загрузка файлов...</span>
+                        <span id="uploadPercentageText" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">0%</span>
+                    </div>
+                    <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; position: relative;">
+                        <div id="uploadProgressBar" style="width: 0%; height: 100%; background: var(--primary-glow); border-radius: 3px; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px #00f2fe;"></div>
+                    </div>
+                    
+                    <div class="progress-steps" style="margin-top: 0.25rem; max-width: 100%;">
+                        <div class="progress-step" id="ustep-upload">
+                            <div class="step-dot"></div>
+                            <span>1. Загрузка файлов на сервер</span>
+                        </div>
+                        <div class="progress-step" id="ustep-process">
+                            <div class="step-dot"></div>
+                            <span>2. Распознавание речи, текста и кадров (ASR/OCR/DET)</span>
+                        </div>
+                        <div class="progress-step" id="ustep-embed">
+                            <div class="step-dot"></div>
+                            <span>3. Построение векторного индекса</span>
+                        </div>
+                    </div>
+
+                    <!-- Modern 2026-style Sub-Steps neural network statuses dashboard -->
+                    <div class="indexing-steps-container">
+                        <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+                            <span class="logo-glow" style="width: 5px; height: 5px; box-shadow: 0 0 8px #00f2fe; background: #00f2fe; animation: pulse 2s infinite ease-in-out;"></span>
+                            <span>Мониторинг нейросетевой обработки (2026):</span>
+                        </div>
+                        
+                        <!-- Sub-Step ASR -->
+                        <div class="sub-step" id="sub-asr" style="display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <div style="display: flex; align-items: center;">
+                                    <span class="sub-step-icon">🎙️</span>
+                                    <span class="sub-step-name">Распознавание речи (ASR via Whisper Turbo)</span>
+                                </div>
+                                <span class="sub-step-status" id="sub-status-asr">В ожидании</span>
+                            </div>
+                            <!-- Mini progress bar -->
+                            <div class="sub-step-bar-container" id="sub-bar-container-asr" style="width: 100%; height: 3px; background: rgba(255,255,255,0.03); border-radius: 2px; overflow: hidden; display: none;">
+                                <div class="sub-step-bar-fill" id="sub-bar-fill-asr" style="width: 0%; height: 100%; background: #c084fc; box-shadow: 0 0 6px #c084fc; border-radius: 2px; transition: width 0.3s;"></div>
+                            </div>
+                            <!-- Live Telemetry Details -->
+                            <div class="sub-step-details" id="sub-details-asr" style="font-size: 0.72rem; color: var(--text-muted); display: none; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; padding-left: 2rem;">
+                            </div>
+                        </div>
+                        
+                        <!-- Sub-Step OCR -->
+                        <div class="sub-step" id="sub-ocr" style="display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <div style="display: flex; align-items: center;">
+                                    <span class="sub-step-icon">🖥️</span>
+                                    <span class="sub-step-name">Распознавание текста на слайдах (OCR via EasyOCR)</span>
+                                </div>
+                                <span class="sub-step-status" id="sub-status-ocr">В ожидании</span>
+                            </div>
+                            <!-- Mini progress bar -->
+                            <div class="sub-step-bar-container" id="sub-bar-container-ocr" style="width: 100%; height: 3px; background: rgba(255,255,255,0.03); border-radius: 2px; overflow: hidden; display: none;">
+                                <div class="sub-step-bar-fill" id="sub-bar-fill-ocr" style="width: 0%; height: 100%; background: #34d399; box-shadow: 0 0 6px #34d399; border-radius: 2px; transition: width 0.3s;"></div>
+                            </div>
+                            <!-- Live Telemetry Details -->
+                            <div class="sub-step-details" id="sub-details-ocr" style="font-size: 0.72rem; color: var(--text-muted); display: none; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; padding-left: 2rem;">
+                            </div>
+                        </div>
+                        
+                        <!-- Sub-Step DET -->
+                        <div class="sub-step" id="sub-det" style="display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <div style="display: flex; align-items: center;">
+                                    <span class="sub-step-icon">👁️</span>
+                                    <span class="sub-step-name">Описание сцен и кадров (DET via BLIP Captioning)</span>
+                                </div>
+                                <span class="sub-step-status" id="sub-status-det">В ожидании</span>
+                            </div>
+                            <!-- Mini progress bar -->
+                            <div class="sub-step-bar-container" id="sub-bar-container-det" style="width: 100%; height: 3px; background: rgba(255,255,255,0.03); border-radius: 2px; overflow: hidden; display: none;">
+                                <div class="sub-step-bar-fill" id="sub-bar-fill-det" style="width: 0%; height: 100%; background: #fbbf24; box-shadow: 0 0 6px #fbbf24; border-radius: 2px; transition: width 0.3s;"></div>
+                            </div>
+                            <!-- Live Telemetry Details -->
+                            <div class="sub-step-details" id="sub-details-det" style="font-size: 0.72rem; color: var(--text-muted); display: none; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; padding-left: 2rem;">
+                            </div>
+                        </div>
+                        
+                        <!-- Sub-Step Embed -->
+                        <div class="sub-step" id="sub-embed" style="display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <div style="display: flex; align-items: center;">
+                                    <span class="sub-step-icon">🧠</span>
+                                    <span class="sub-step-name">Векторизация и запись в базу (Embedding via Qwen3 + Qdrant)</span>
+                                </div>
+                                <span class="sub-step-status" id="sub-status-embed">В ожидании</span>
+                            </div>
+                            <!-- Mini progress bar -->
+                            <div class="sub-step-bar-container" id="sub-bar-container-embed" style="width: 100%; height: 3px; background: rgba(255,255,255,0.03); border-radius: 2px; overflow: hidden; display: none;">
+                                <div class="sub-step-bar-fill" id="sub-bar-fill-embed" style="width: 0%; height: 100%; background: #00f2fe; box-shadow: 0 0 6px #00f2fe; border-radius: 2px; transition: width 0.3s;"></div>
+                            </div>
+                            <!-- Live Telemetry Details -->
+                            <div class="sub-step-details" id="sub-details-embed" style="font-size: 0.72rem; color: var(--text-muted); display: none; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; padding-left: 2rem;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- List of current custom videos -->
+                <div id="uploadedFilesContainer" style="display: none; flex-direction: column; gap: 0.75rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 0.5rem; margin-bottom: 0.25rem;">
+                        <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">Загруженные файлы в коллекции:</span>
+                        <button class="suggestion-chip" onclick="clearUploadedCollection()" style="border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02); color: #f87171; padding: 0.3rem 0.85rem;" onmouseover="this.style.background='rgba(239, 68, 68, 0.08)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.02)'">
+                            🗑️ Очистить мою коллекцию
+                        </button>
+                    </div>
+                    <div id="customFilesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem;">
+                        <!-- Dynamically filled -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loader -->
+        <section id="loader" class="loading-container">
+            <div class="loader-ring"></div>
+            <div class="loading-text">Поиск ответов в видеозаписи...</div>
+            <div class="progress-steps">
+                <div class="progress-step" id="step-decomp">
+                    <div class="step-dot"></div>
+                    <span>1. Определение поисковых шагов</span>
+                </div>
+                <div class="progress-step" id="step-vector">
+                    <div class="step-dot"></div>
+                    <span>2. Поиск ключевых моментов</span>
+                </div>
+                <div class="progress-step" id="step-llm">
+                    <div class="step-dot"></div>
+                    <span>3. Объединение фактов и написание ответа</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Presenter -->
+        <section id="resultsLayout" class="results-layout">
+            
+            <!-- Top Section: Primary elements (Video & Answer) -->
+            <div class="primary-row">
+                
+                <!-- Video Player Panel (Hidden by default, shown when results load) -->
+                <div class="panel" id="videoPlayerPanel" style="display: none;">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00f2fe" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.1rem;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span>Видеозапись</span>
+                        </div>
+                        <div id="headerVideoTime" class="panel-subtitle">00:00 / 00:00</div>
+                    </div>
+                    
+                    <div class="panel-body" style="padding: 0; background: #000; position: relative;">
+                        <div class="video-container" id="videoContainer">
+                            <video id="videoPlayer">
+                                Ваш браузер не поддерживает воспроизведение видео.
+                            </video>
+                            
+                            <!-- YouTube-style controls overlay -->
+                            <div class="custom-video-controls" id="customControls">
+                                <!-- Tall highly-magnetic Progress Bar Container -->
+                                <div class="progress-bar-container" id="progressContainer">
+                                    <div class="progress-bar-track" id="progressTrack">
+                                        <div class="progress-bar-fill" id="progressFill"></div>
+                                        <div class="progress-bar-handle" id="progressHandle"></div>
+                                        <!-- Time Preview Tooltip -->
+                                        <div class="hover-time-tooltip" id="hoverTooltip">00:00</div>
+                                    </div>
+                                </div>
+
+                                <button class="control-btn" id="playPauseBtn" title="Воспроизвести/Пауза" style="margin-top: 8px;">
+                                    <svg id="playIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                    <svg id="pauseIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                </button>
+                                
+                                <span class="time-display" id="videoTime" style="margin-top: 8px;">00:00 / 00:00</span>
+                                
+                                <div style="flex: 1;"></div>
+                                
+                                <!-- Volume controller -->
+                                <div class="volume-container" style="margin-top: 8px;">
+                                    <button class="control-btn" id="muteBtn" title="Вкл/Выкл звук">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                    </button>
+                                    <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="1">
+                                </div>
+                                
+                                <button class="control-btn" id="fullscreenBtn" title="Во весь экран" style="margin-top: 8px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Final Answer Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.1rem;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            <span>Подробный ответ ИИ</span>
+                        </div>
+                        <button class="action-icon-btn" onclick="copyAnswer()" title="Копировать ответ">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div id="answerBody" class="answer-content">
+                            <!-- Filled by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Section: Auxiliary elements (Source Candidates) -->
+            <div class="auxiliary-row">
+                
+                <!-- Full Width panel: Candidates List -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.1rem;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                            <span>Найденные факты в видео</span>
+                        </div>
+                        <div id="hitsSummary" class="panel-subtitle">0 моментов</div>
+                    </div>
+                    <div class="panel-body">
+                        <div id="candidatesList" class="candidates-list">
+                            <!-- Filled by JS -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        const queryInput = document.getElementById('queryInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const loader = document.getElementById('loader');
+        const resultsLayout = document.getElementById('resultsLayout');
+        
+        // Progress steps
+        const stepDecomp = document.getElementById('step-decomp');
+        const stepVector = document.getElementById('step-vector');
+        const stepLlm = document.getElementById('step-llm');
+
+        // Form fields
+        const answerBody = document.getElementById('answerBody');
+        const hitsSummary = document.getElementById('hitsSummary');
+        const candidatesList = document.getElementById('candidatesList');
+
+        // Custom Video Elements
+        const video = document.getElementById('videoPlayer');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        const videoTime = document.getElementById('videoTime');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressHandle = document.getElementById('progressHandle');
+        const hoverTooltip = document.getElementById('hoverTooltip');
+        const muteBtn = document.getElementById('muteBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const videoContainer = document.getElementById('videoContainer');
+
+        // YouTube-style auto-fade controls on mouse idle
+        let controlsTimeout;
+        const controls = document.getElementById('customControls');
+        
+        function showControls() {
+            controls.style.opacity = '1';
+            controls.style.transform = 'translateY(0)';
+            videoContainer.style.cursor = 'default';
+            
+            clearTimeout(controlsTimeout);
+            if (!video.paused) {
+                controlsTimeout = setTimeout(hideControls, 2200);
+            }
+        }
+        
+        function hideControls() {
+            if (video.paused) return; // Keep visible when paused
+            controls.style.opacity = '0';
+            controls.style.transform = 'translateY(5px)';
+            videoContainer.style.cursor = 'none'; // Hide mouse cursor
+        }
+        
+        videoContainer.addEventListener('mousemove', showControls);
+        videoContainer.addEventListener('mouseleave', hideControls);
+        video.addEventListener('play', showControls);
+        video.addEventListener('pause', showControls);
+
+        // Video Event Listeners
+        playPauseBtn.addEventListener('click', togglePlay);
+        video.addEventListener('click', togglePlay);
+        
+        function togglePlay() {
+            if (video.paused) {
+                video.play();
+                playIcon.style.display = 'none';
+                pauseIcon.style.display = 'block';
+            } else {
+                video.pause();
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+            }
+        }
+
+        // DOM update frequency optimization (DOM writes reduced by 98%)
+        let lastTimeText = '';
+        video.addEventListener('timeupdate', () => {
+            const cur = formatTime(video.currentTime);
+            const dur = video.duration ? formatTime(video.duration) : '--:--';
+            const timeText = `${cur} / ${dur}`;
+            
+            if (timeText !== lastTimeText) {
+                videoTime.innerText = timeText;
+                const headerTime = document.getElementById('headerVideoTime');
+                if (headerTime) {
+                    headerTime.innerText = timeText;
+                }
+                lastTimeText = timeText;
+            }
+            
+            if (video.duration) {
+                const pct = (video.currentTime / video.duration) * 100;
+                progressFill.style.width = `${pct}%`;
+                progressHandle.style.left = `${pct}%`;
+            }
+        });
+
+        // Interactive seek timeline click and drag
+        let isScrubbing = false;
+        
+        progressContainer.addEventListener('mousedown', (e) => {
+            isScrubbing = true;
+            scrub(e);
+        });
+        
+        window.addEventListener('mousemove', (e) => {
+            if (isScrubbing) scrub(e);
+        });
+        
+        window.addEventListener('mouseup', () => {
+            isScrubbing = false;
+        });
+
+        function scrub(e) {
+            const rect = progressContainer.getBoundingClientRect();
+            let pos = (e.clientX - rect.left) / rect.width;
+            pos = Math.max(0, Math.min(1, pos));
+            if (video.duration) {
+                video.currentTime = pos * video.duration;
+            }
+        }
+
+        // Timeline Progress Hover Tooltip
+        progressContainer.addEventListener('mouseenter', () => {
+            hoverTooltip.style.opacity = '1';
+        });
+        
+        progressContainer.addEventListener('mouseleave', () => {
+            hoverTooltip.style.opacity = '0';
+        });
+        
+        progressContainer.addEventListener('mousemove', (e) => {
+            const rect = progressContainer.getBoundingClientRect();
+            let pos = (e.clientX - rect.left) / rect.width;
+            pos = Math.max(0, Math.min(1, pos));
+            if (video.duration) {
+                const time = pos * video.duration;
+                hoverTooltip.innerText = formatTime(time);
+                hoverTooltip.style.left = `${pos * 100}%`;
+            }
+        });
+
+        // Volume controller
+        volumeSlider.addEventListener('input', (e) => {
+            video.volume = e.target.value;
+            video.muted = (e.target.value == 0);
+        });
+
+        muteBtn.addEventListener('click', () => {
+            video.muted = !video.muted;
+            if (video.muted) {
+                volumeSlider.value = 0;
+            } else {
+                volumeSlider.value = video.volume;
+            }
+        });
+
+        // True Fullscreen: Supports webkit vendor prefixes to trigger OS-level fullscreen on macOS Safari/Chrome
+        fullscreenBtn.addEventListener('click', () => {
+            const isFS = document.fullscreenElement || 
+                         document.webkitFullscreenElement || 
+                         document.mozFullScreenElement || 
+                         document.msFullscreenElement;
+                         
+            if (!isFS) {
+                if (videoContainer.requestFullscreen) {
+                    videoContainer.requestFullscreen();
+                } else if (videoContainer.webkitRequestFullscreen) { /* Safari */
+                    videoContainer.webkitRequestFullscreen();
+                } else if (videoContainer.mozRequestFullScreen) { /* Firefox */
+                    videoContainer.mozRequestFullScreen();
+                } else if (videoContainer.msRequestFullscreen) { /* IE/Edge */
+                    videoContainer.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) { /* Safari */
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) { /* Firefox */
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) { /* IE/Edge */
+                    document.msExitFullscreen();
+                }
+            }
+        });
+
+        // Handle Click / Enter key
+        searchBtn.addEventListener('click', performSearch);
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        function fillQuery(text) {
+            queryInput.value = text;
+            performSearch();
+        }
+
+        function formatTime(seconds) {
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (hrs > 0) {
+                return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function prepareVideoPlayer(videoFile, startSeconds) {
+            const panel = document.getElementById('videoPlayerPanel');
+            panel.style.display = 'block';
+            
+            const videoUrl = `/videos/${videoFile}`;
+            const currentSrc = video.getAttribute('src');
+            if (!currentSrc || !currentSrc.endsWith(videoUrl)) {
+                video.setAttribute('src', videoUrl);
+                video.load();
+                
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+            }
+            
+            video.currentTime = startSeconds;
+        }
+
+        function playVideoSegment(videoFile, startSeconds) {
+            prepareVideoPlayer(videoFile, startSeconds);
+            
+            video.play().then(() => {
+                playIcon.style.display = 'none';
+                pauseIcon.style.display = 'block';
+            }).catch(e => {
+                console.log("Play blocked, awaiting user click:", e);
+            });
+            
+            document.getElementById('videoPlayerPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Russian keyword highlights
+        const keywords = ['ляра', 'максим', 'мага', 'ларионов', 'иларионов', 'матриц', 'банк', 'кущенко', 'сабирова', 'бородачева'];
+        
+        function highlightText(text) {
+            if (!text) return '';
+            let escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
+            keywords.forEach(kw => {
+                const regex = new RegExp(`(\\b${kw}[а-я]*|\\b${kw})`, 'gi');
+                escaped = escaped.replace(regex, '<span class="highlight-word">$1</span>');
+            });
+            return escaped;
+        }
+
+        // Smart parser to extract the very first timestamp mentioned in the LLM text answer
+        function parseFirstTimestampFromText(text) {
+            if (!text) return null;
+            
+            // Match HH:MM:SS format
+            const hmsRegex = /\b(\d{1,2}):(\d{2}):(\d{2})\b/;
+            const hmsMatch = text.match(hmsRegex);
+            if (hmsMatch) {
+                const hrs = parseInt(hmsMatch[1], 10);
+                const mins = parseInt(hmsMatch[2], 10);
+                const secs = parseInt(hmsMatch[3], 10);
+                return hrs * 3600 + mins * 60 + secs;
+            }
+            
+            // Match MM:SS format
+            const msRegex = /\b(\d{1,3}):(\d{2})\b/;
+            const msMatch = text.match(msRegex);
+            if (msMatch) {
+                const mins = parseInt(msMatch[1], 10);
+                const secs = parseInt(msMatch[2], 10);
+                return mins * 60 + secs;
+            }
+            
+            return null;
+        }
+
+        // Clean & structured formatting of raw OCR and ASR texts
+        function beautifyRawText(text, modality) {
+            if (!text) return '';
+            
+            if (modality === 'OCR') {
+                let clean = text.trim();
+                
+                // If it contains OCR pipe separators, parse them into premium data dashboard chips
+                const parts = clean.split('|').map(p => p.trim()).filter(p => p.length > 0);
+                
+                if (parts.length > 2) {
+                    let hasKV = false;
+                    let listItems = [];
+                    let tags = [];
+                    
+                    parts.forEach(part => {
+                        if (part.includes(':')) {
+                            hasKV = true;
+                            const kv = part.split(':');
+                            const key = kv[0].trim();
+                            const val = kv.slice(1).join(':').trim();
+                            
+                            if (val && val !== '.' && val !== '-') {
+                                listItems.push({ key, val });
+                            }
+                        } else {
+                            if (part.length > 1 && part !== '.' && part !== '-') {
+                                tags.push(part);
+                            }
+                        }
+                    });
+                    
+                    let resultHTML = '<div class="ocr-grid-container">';
+                    
+                    // Render Key-Value metrics if present
+                    if (listItems.length > 0) {
+                        resultHTML += '<div class="ocr-tags-grid">';
+                        listItems.forEach(item => {
+                            resultHTML += `
+                                <div class="ocr-kv-box">
+                                    <span class="ocr-kv-label">${item.key}</span>
+                                    <span class="ocr-kv-value">${highlightText(item.val)}</span>
+                                </div>
+                            `;
+                        });
+                        resultHTML += '</div>';
+                    }
+                    
+                    // Render status chips
+                    if (tags.length > 0) {
+                        resultHTML += '<div class="ocr-tags-grid" style="margin-top: 0.25rem;">';
+                        tags.forEach(tag => {
+                            const isStatus = tag.toLowerCase().includes('seen') || tag.toLowerCase().includes('ago') || tag.toLowerCase().includes('now');
+                            const styleAttr = isStatus ? 'border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.05); color: var(--accent-green);' : '';
+                            
+                            resultHTML += `
+                                <div class="ocr-glass-chip" style="${styleAttr}">
+                                    <span style="width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0;"></span>
+                                    <span>${highlightText(tag)}</span>
+                                </div>
+                            `;
+                        });
+                        resultHTML += '</div>';
+                    }
+                    
+                    resultHTML += '</div>';
+                    return resultHTML;
+                }
+                
+                return `<div class="ocr-glass-chip" style="display: inline-flex;">${parts.map(p => highlightText(p)).join(' • ')}</div>`;
+            }
+            
+            if (modality === 'ASR') {
+                return `
+                    <div style="font-size: 0.95rem; line-height: 1.65; color: #e5e7eb; font-style: italic; position: relative; padding-left: 1.25rem; border-left: 3px solid var(--accent-purple); background: rgba(189, 147, 249, 0.02); padding: 0.75rem 1rem; border-radius: 12px;">
+                        «${highlightText(text)}»
+                    </div>
+                `;
+            }
+            
+            return highlightText(text);
+        }
+
+        // Markdown Bold & Subheader Parser for final answer
+        function parseMarkdown(text, videoFile) {
+            if (!text) return '';
+            
+            let formatted = highlightText(text);
+            
+            // Bold **text** -> <strong>text</strong>
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Subheaders
+            formatted = formatted.replace(/### (.*?)\n/g, '<h3 style="font-size: 1.05rem; margin-top: 1.25rem; margin-bottom: 0.6rem; color: #fff; font-weight: 700;">$1</h3>');
+            formatted = formatted.replace(/## (.*?)\n/g, '<h2 style="font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #fff; font-weight: 800;">$1</h2>');
+            
+            const lines = formatted.split('\n');
+            let inList = false;
+            let resultHTML = [];
+            
+            lines.forEach(line => {
+                const trimmed = line.trim();
+                let processedLine = trimmed;
+                
+                // Convert inline plaintext timestamps inside the LLM response into clickable seek badges
+                if (videoFile) {
+                    // Match HH:MM:SS format
+                    processedLine = processedLine.replace(/\b(\d{1,2}):(\d{2}):(\d{2})\b/g, (match, hrs, mins, secs) => {
+                        const totalSecs = parseInt(hrs, 10) * 3600 + parseInt(mins, 10) * 60 + parseInt(secs, 10);
+                        return `<span class="seek-badge" style="font-size: 0.8rem; padding: 0.15rem 0.65rem; margin: 0 0.2rem; cursor: pointer; display: inline-flex;" onclick="playVideoSegment('${videoFile}', ${totalSecs})">${match}</span>`;
+                    });
+                    
+                    // Match MM:SS format (safely excluding click variables or other numeric values)
+                    processedLine = processedLine.replace(/(?<!["'=\d])\b(\d{1,3}):(\d{2})\b(?!["'\/])/g, (match, mins, secs) => {
+                        const totalSecs = parseInt(mins, 10) * 60 + parseInt(secs, 10);
+                        return `<span class="seek-badge" style="font-size: 0.8rem; padding: 0.15rem 0.65rem; margin: 0 0.2rem; cursor: pointer; display: inline-flex;" onclick="playVideoSegment('${videoFile}', ${totalSecs})">${match}</span>`;
+                    });
+                }
+                
+                if (processedLine.startsWith('* ') || processedLine.startsWith('- ')) {
+                    if (!inList) {
+                        resultHTML.push('<ul>');
+                        inList = true;
+                    }
+                    resultHTML.push(`<li>${processedLine.substring(2)}</li>`);
+                } else if (processedLine.match(/^\d+\.\s/)) {
+                    if (inList) {
+                        resultHTML.push('</ul>');
+                        inList = false;
+                    }
+                    const numContent = processedLine.replace(/^\d+\.\s/, '');
+                    resultHTML.push(`<p style="margin-bottom: 0.6rem; padding-left: 0.5rem; border-left: 2px solid var(--accent-cyan);"><strong>${processedLine.match(/^\d+\./)[0]}</strong> ${numContent}</p>`);
+                } else {
+                    if (inList) {
+                        resultHTML.push('</ul>');
+                        inList = false;
+                    }
+                    if (processedLine.length > 0) {
+                        if (processedLine.startsWith('<h3') || processedLine.startsWith('<h2')) {
+                            resultHTML.push(processedLine);
+                        } else {
+                            resultHTML.push(`<p style="margin-bottom: 0.8rem;">${processedLine}</p>`);
+                        }
+                    }
+                }
+            });
+            
+            if (inList) {
+                resultHTML.push('</ul>');
+            }
+            
+            return resultHTML.join('\n');
+        }
+
+        async function copyAnswer() {
+            const text = answerBody.innerText;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                alert('Ответ успешно скопирован!');
+            } catch (err) {
+                alert('Не удалось скопировать.');
+            }
+        }
+
+        async function performSearch() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            resultsLayout.classList.remove('active');
+            loader.style.display = 'flex';
+            
+            setStepState('decomp', 'active');
+            setStepState('vector', 'pending');
+            setStepState('llm', 'pending');
+
+            try {
+                setTimeout(() => setStepState('decomp', 'done'), 500);
+                setTimeout(() => setStepState('vector', 'active'), 650);
+                
+                const body = { query };
+                if (currentCollection === 'custom') {
+                    body.collection_prefix = 'uploaded_videos';
+                }
+                
+                const response = await fetch('/api/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Не удалось получить ответ');
+                }
+
+                setStepState('vector', 'done');
+                setStepState('llm', 'active');
+                
+                const data = await response.json();
+                
+                setTimeout(() => {
+                    setStepState('llm', 'done');
+                    renderResults(data);
+                }, 350);
+
+            } catch (error) {
+                alert('Ошибка: ' + error.message);
+                loader.style.display = 'none';
+            }
+        }
+
+        function setStepState(step, state) {
+            let el = stepDecomp;
+            if (step === 'vector') el = stepVector;
+            if (step === 'llm') el = stepLlm;
+
+            el.classList.remove('active', 'done');
+            if (state === 'active') el.classList.add('active');
+            if (state === 'done') el.classList.add('done');
+        }
+
+        function renderResults(data) {
+            loader.style.display = 'none';
+            resultsLayout.classList.add('active');
+
+            const numCandidates = data.candidates ? data.candidates.length : 0;
+            const firstVideoFile = numCandidates > 0 ? data.candidates[0].video_file : '';
+
+            // Render Parsed Markdown Answer (auto-creates seek badges for inline timestamps)
+            answerBody.innerHTML = parseMarkdown(data.answer, firstVideoFile) || 'Ответ пуст.';
+
+            // Hits count
+            hitsSummary.innerText = `${numCandidates} момент(ов)`;
+
+            // Preload logic: check if LLM mentioned a timestamp, otherwise default to first candidate start time
+            if (numCandidates > 0) {
+                let startSeconds = parseFirstTimestampFromText(data.answer);
+                if (startSeconds !== null) {
+                    prepareVideoPlayer(firstVideoFile, startSeconds);
+                    console.log(`Preloaded player to LLM-mentioned timestamp: ${startSeconds}s`);
+                } else {
+                    const firstCand = data.candidates[0];
+                    prepareVideoPlayer(firstVideoFile, firstCand.start);
+                    console.log(`Preloaded player to fallback candidate start: ${firstCand.start}s`);
+                }
+            } else {
+                document.getElementById('videoPlayerPanel').style.display = 'none';
+            }
+
+            // Render Candidates Timeline facts
+            candidatesList.innerHTML = '';
+            if (numCandidates === 0) {
+                candidatesList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 2rem;">Релевантных эпизодов в видео не обнаружено.</div>';
+                return;
+            }
+
+            data.candidates.forEach((cand, idx) => {
+                const card = document.createElement('div');
+                card.className = 'candidate-card';
+
+                // Format hit highlights with beautiful formatting
+                let hitsHTML = '';
+                if (cand.hits && cand.hits.length > 0) {
+                    cand.hits.forEach(hit => {
+                        let modalityLabel = 'Фрагмент видео';
+                        let modalityIcon = '📄';
+                        if (hit.modality === 'ASR') { modalityLabel = 'Устное выступление'; modalityIcon = '🎙️'; }
+                        else if (hit.modality === 'OCR') { modalityLabel = 'Данные с экрана / слайда'; modalityIcon = '🖥️'; }
+                        else if (hit.modality === 'DET') { modalityLabel = 'Визуальный кадр'; modalityIcon = '👁️'; }
+
+                        hitsHTML += `
+                            <div class="hit-item hit-${hit.modality.toLowerCase()}">
+                                <div class="hit-meta">
+                                    <span class="modality-badge ${hit.modality.toLowerCase()}">${modalityIcon} ${modalityLabel}</span>
+                                    <span class="seek-badge" style="padding: 0.2rem 0.7rem; font-size: 0.72rem;" onclick="playVideoSegment('${cand.video_file}', ${hit.start})" title="Смотреть с этой секунды">
+                                        Смотреть с ${formatTime(hit.start)}
+                                    </span>
+                                </div>
+                                <div class="hit-text">${beautifyRawText(hit.text, hit.modality)}</div>
+                            </div>
+                        `;
+                    });
+                }
+
+                card.innerHTML = `
+                    <div class="candidate-header">
+                        <div class="candidate-name">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            <span>Ключевой фрагмент №${idx + 1}</span>
+                        </div>
+                        <span class="seek-badge" style="font-size: 0.74rem;" onclick="playVideoSegment('${cand.video_file}', ${cand.start})">
+                            Смотреть весь фрагмент: ${formatTime(cand.start)} - ${formatTime(cand.end)}
+                        </span>
+                    </div>
+                    <div class="candidate-body">
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            ${hitsHTML}
+                        </div>
+                    </div>
+                `;
+
+                candidatesList.appendChild(card);
+            });
+        }
+
+        // Dynamic collection state
+        let currentCollection = 'main';
+        let uploadedVideos = [];
+
+        function switchTab(tab) {
+            currentCollection = tab;
+            const tabMain = document.getElementById('tabMain');
+            const tabCustom = document.getElementById('tabCustom');
+            const mainSuggestions = document.getElementById('mainSuggestions');
+            const customIndexArea = document.getElementById('customIndexArea');
+            const queryInput = document.getElementById('queryInput');
+
+            tabMain.classList.remove('active');
+            tabCustom.classList.remove('active');
+
+            if (tab === 'main') {
+                tabMain.classList.add('active');
+                mainSuggestions.style.display = 'flex';
+                customIndexArea.style.display = 'none';
+                queryInput.placeholder = "Введите поисковый вопрос по видеозаписи...";
+            } else {
+                tabCustom.classList.add('active');
+                mainSuggestions.style.display = 'none';
+                customIndexArea.style.display = 'flex';
+                queryInput.placeholder = "Введите поисковый вопрос по вашей коллекции загруженных видео...";
+            }
+        }
+
+        // Drag and Drop Event Listeners
+        const dropZone = document.getElementById('dropZone');
+        
+        if (dropZone) {
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.classList.add('dragover');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.classList.remove('dragover');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    uploadFiles(files);
+                }
+            }, false);
+        }
+
+        function triggerFileSelect() {
+            document.getElementById('fileInput').click();
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                uploadFiles(files);
+            }
+        }
+
+        async function uploadFiles(files) {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const percentageText = document.getElementById('uploadPercentageText');
+            const statusText = document.getElementById('uploadStatusText');
+            
+            // Reset Macro steps
+            progressContainer.style.display = 'flex';
+            progressBar.style.width = '0%';
+            percentageText.innerText = '0%';
+            statusText.innerText = 'Загрузка файлов на сервер...';
+            
+            setUploadStepState('upload', 'active');
+            setUploadStepState('process', 'pending');
+            setUploadStepState('embed', 'pending');
+
+            // Reset Sub steps (2026 monitoring)
+            const subSteps = ['asr', 'ocr', 'det', 'embed'];
+            subSteps.forEach(step => {
+                const el = document.getElementById(`sub-${step}`);
+                const statusEl = document.getElementById(`sub-status-${step}`);
+                if (el) {
+                    el.classList.remove('active', 'done');
+                }
+                if (statusEl) {
+                    statusEl.innerText = 'В ожидании';
+                }
+            });
+
+            // Set upload step elements
+            const subUpload = document.getElementById('sub-upload');
+            const subStatusUpload = document.getElementById('sub-status-upload');
+            if (subUpload) {
+                subUpload.classList.remove('done');
+                subUpload.classList.add('active');
+            }
+            if (subStatusUpload) {
+                subStatusUpload.innerText = 'Загрузка...';
+            }
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload', true);
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width = `${pct}%`;
+                    percentageText.innerText = `${pct}%`;
+                    if (subStatusUpload) {
+                        subStatusUpload.innerText = `Загрузка (${pct}%)`;
+                    }
+                    
+                    if (pct === 100) {
+                        statusText.innerText = 'Нейросетевой анализ видеоматериалов...';
+                        setUploadStepState('upload', 'done');
+                        setUploadStepState('process', 'active');
+                        if (subUpload) {
+                            subUpload.classList.remove('active');
+                            subUpload.classList.add('done');
+                        }
+                        if (subStatusUpload) {
+                            subStatusUpload.innerText = 'Успешно';
+                        }
+                    }
+                }
+            });
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    const responseData = JSON.parse(xhr.responseText);
+                    const sessionId = responseData.session_id;
+                    
+                    // Open EventSource to receive real-time neural network extraction events
+                    const eventSource = new EventSource(`/api/upload/events/${sessionId}`);
+                    
+                    eventSource.onmessage = function(event) {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.step === 'done') {
+                            eventSource.close();
+                            statusText.innerText = 'Индексация успешно завершена!';
+                            progressBar.style.width = '100%';
+                            percentageText.innerText = '100%';
+                            setUploadStepState('process', 'done');
+                            setUploadStepState('embed', 'done');
+                            
+                            // Complete all sub-step visual elements
+                            const steps = ['asr', 'ocr', 'det', 'embed'];
+                            steps.forEach(step => {
+                                const el = document.getElementById(`sub-${step}`);
+                                const statusEl = document.getElementById(`sub-status-${step}`);
+                                const containerEl = document.getElementById(`sub-bar-container-${step}`);
+                                const fillEl = document.getElementById(`sub-bar-fill-${step}`);
+                                if (el) {
+                                    el.classList.remove('active');
+                                    el.classList.add('done');
+                                }
+                                if (statusEl && statusEl.innerText === 'В ожидании') statusEl.innerText = 'Успешно';
+                                if (containerEl) containerEl.style.display = 'block';
+                                if (fillEl) fillEl.style.width = '100%';
+                            });
+                            
+                            alert('Ваши видео успешно проанализированы и добавлены в Мою коллекцию!');
+                            setTimeout(() => {
+                                progressContainer.style.display = 'none';
+                                loadCollectionStatus();
+                            }, 1500);
+                            return;
+                        }
+                        
+                        if (data.step === 'error') {
+                            eventSource.close();
+                            alert('Ошибка обработки нейросетью: ' + data.message);
+                            progressContainer.style.display = 'none';
+                            return;
+                        }
+                        
+                        // Select DOM elements for the step
+                        const stepId = data.step; // asr, ocr, det, embed
+                        const stepEl = document.getElementById(`sub-${stepId}`);
+                        const statusEl = document.getElementById(`sub-status-${stepId}`);
+                        const detailsEl = document.getElementById(`sub-details-${stepId}`);
+                        const barContainer = document.getElementById(`sub-bar-container-${stepId}`);
+                        const barFill = document.getElementById(`sub-bar-fill-${stepId}`);
+                        
+                        if (!stepEl) return;
+                        
+                        if (data.type === 'telemetry') {
+                            // Update live telemetry (2026 style)
+                            stepEl.classList.add('active');
+                            if (barContainer) barContainer.style.display = 'block';
+                            if (barFill) barFill.style.width = `${data.percent}%`;
+                            
+                            if (statusEl) {
+                                statusEl.innerText = `${data.percent}%`;
+                            }
+                            
+                            if (detailsEl) {
+                                detailsEl.style.display = 'flex';
+                                
+                                const current = data.current_idx;
+                                const total = data.total_items;
+                                const speed = data.speed ? data.speed.toFixed(1) : '0.0';
+                                const eta = data.eta ? `${data.eta.toFixed(1)}с` : '0с';
+                                const ram = data.rss_mb ? `${(data.rss_mb / 1024).toFixed(2)} ГБ` : '0.00 ГБ';
+                                const device = data.device ? data.device.toUpperCase() : 'MPS';
+                                
+                                let unit = 'кадров';
+                                if (stepId === 'asr') unit = 'фрагментов';
+                                else if (stepId === 'ocr') unit = 'кадров';
+                                else if (stepId === 'embed') unit = 'батчей';
+                                
+                                detailsEl.innerHTML = `
+                                    <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; width: 100%;">
+                                        <span>📊 Прогресс: <b>${current}/${total}</b> ${unit}</span>
+                                        <span>⚡ Скорость: <b>${speed} FPS</b></span>
+                                        <span>⏳ ETA: <b>${eta}</b></span>
+                                        <span>🧠 Память: <b>${ram}</b></span>
+                                        <span style="background: rgba(255,255,255,0.06); padding: 0.05rem 0.4rem; border-radius: 4px; font-weight: 700; font-size: 0.65rem; color: #00f2fe; border: 1px solid rgba(0, 242, 254, 0.15);">📟 ${device}</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (stepId === 'embed') {
+                                setUploadStepState('process', 'done');
+                                setUploadStepState('embed', 'active');
+                            }
+                        } else if (data.type === 'milestone') {
+                            // Milestone updates
+                            if (data.status === 'running') {
+                                // Deactivate other items
+                                const subSteps = ['asr', 'ocr', 'det', 'embed'];
+                                subSteps.forEach(s => {
+                                    const otherEl = document.getElementById(`sub-${s}`);
+                                    if (otherEl && s !== stepId) {
+                                        otherEl.classList.remove('active');
+                                    }
+                                });
+                                
+                                stepEl.classList.add('active');
+                                if (statusEl) statusEl.innerText = 'Обработка...';
+                                if (barContainer) barContainer.style.display = 'block';
+                                
+                                if (stepId === 'embed') {
+                                    setUploadStepState('process', 'done');
+                                    setUploadStepState('embed', 'active');
+                                }
+                            } else if (data.status === 'completed') {
+                                stepEl.classList.remove('active');
+                                stepEl.classList.add('done');
+                                if (barFill) barFill.style.width = '100%';
+                                
+                                if (statusEl) {
+                                    if (stepId === 'embed') {
+                                        const counts = Object.entries(data.stats || {}).map(([k, v]) => `${k.toUpperCase()}: ${v}`).join(' • ');
+                                        statusEl.innerText = `Успешно`;
+                                        if (detailsEl) {
+                                            detailsEl.style.display = 'flex';
+                                            detailsEl.innerHTML = `<span style="color: var(--accent-green);">✨ База Qdrant обновлена: <b>${counts}</b> записей векторизовано!</span>`;
+                                        }
+                                    } else {
+                                        const unit = stepId === 'asr' ? 'реплик' : (stepId === 'ocr' ? 'слайдов' : 'сцен');
+                                        statusEl.innerText = `Успешно`;
+                                        if (detailsEl) {
+                                            detailsEl.style.display = 'flex';
+                                            detailsEl.innerHTML = `<span style="color: var(--accent-green);">✅ Анализ завершен! Успешно извлечено: <b>${data.count}</b> ${unit}.</span>`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    
+                    eventSource.onerror = function() {
+                        eventSource.close();
+                        alert('Сетевая ошибка при получении событий с сервера.');
+                        progressContainer.style.display = 'none';
+                    };
+                } else {
+                    let errMsg = 'Не удалось загрузить файлы.';
+                    try {
+                        const err = JSON.parse(xhr.responseText);
+                        errMsg = err.detail || errMsg;
+                    } catch(e) {}
+                    alert('Ошибка загрузки: ' + errMsg);
+                    progressContainer.style.display = 'none';
+                }
+            };
+
+            xhr.onerror = function() {
+                alert('Сетевая ошибка при загрузке файлов.');
+                progressContainer.style.display = 'none';
+            };
+
+            xhr.send(formData);
+        }
+
+        function setUploadStepState(step, state) {
+            const stepEl = document.getElementById(`ustep-${step}`);
+            if (!stepEl) return;
+            stepEl.classList.remove('active', 'done');
+            if (state === 'active') stepEl.classList.add('active');
+            if (state === 'done') stepEl.classList.add('done');
+        }
+
+        async function loadCollectionStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    uploadedVideos = data.uploaded_videos || [];
+                    updateUploadedFilesUI();
+                }
+            } catch (err) {
+                console.error("Failed to load collection status:", err);
+            }
+        }
+        
+        function updateUploadedFilesUI() {
+            const container = document.getElementById('uploadedFilesContainer');
+            const grid = document.getElementById('customFilesGrid');
+            const customTabTitle = document.getElementById('customTabTitle');
+            
+            if (uploadedVideos.length > 0) {
+                container.style.display = 'flex';
+                customTabTitle.innerText = `Моя коллекция (${uploadedVideos.length})`;
+                
+                grid.innerHTML = '';
+                uploadedVideos.forEach(file => {
+                    const card = document.createElement('div');
+                    card.className = 'custom-file-card';
+                    
+                    const sizeMB = (file.size_bytes / (1024 * 1024)).toFixed(1);
+                    
+                    card.innerHTML = `
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><path d="M23 7a2 2 0 0 0-2-2h-4v10a3 3 0 0 1-3 3H3a3 3 0 0 1-3-3V3a3 3 0 0 1 3-3h7v10h10v7a2 2 0 0 0 2 2z"></path></svg>
+                        <div style="overflow: hidden; flex: 1; display: flex; flex-direction: column; gap: 0.15rem;">
+                            <div style="font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff;" title="${file.original_name}">${file.original_name}</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted);">${sizeMB} MB</div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } else {
+                container.style.display = 'none';
+                customTabTitle.innerText = 'Моя коллекция';
+                grid.innerHTML = '';
+            }
+        }
+        
+        async function clearUploadedCollection() {
+            if (!confirm('Вы действительно хотите полностью очистить Мою коллекцию? Все загруженные видеофайлы и векторные индексы будут удалены.')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/clear-uploads', { method: 'POST' });
+                if (response.ok) {
+                    alert('Ваша коллекция успешно очищена!');
+                    loadCollectionStatus();
+                } else {
+                    alert('Не удалось очистить коллекцию.');
+                }
+            } catch (err) {
+                alert('Ошибка при очистке: ' + err.message);
+            }
+        }
+
+        // Run status check on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadCollectionStatus();
+        });
+    </script>
+</body>
+</html>

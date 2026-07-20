@@ -10,6 +10,10 @@ __pycache__/
 data/videos/
 data/artifacts/
 data/qdrant/
+data/artifacts_backup/
+data/videos_backup/
+data/uploaded_metadata.json
+scratch/
 output/
 logs/
 

@@ -167,6 +167,8 @@ class VideoRAGPipeline:
                 device=runtime_cfg["device"],
                 language=self.cfg["asr"].get("language"),
                 no_speech_threshold=self.cfg["asr"].get("no_speech_threshold", 0.6),
+                initial_prompt=self.cfg["asr"].get("initial_prompt"),
+                workers=self.cfg["asr"].get("workers", 1),
             )
         if self.cfg["ocr"].get("enabled", True):
             self._extractors["ocr"] = EasyOCROnScreenExtractor(
@@ -238,9 +240,19 @@ class VideoRAGPipeline:
     def process_video(self, video_path: str | Path, force: bool = False) -> dict[str, list[ModalityRecord]]:
         video_path = Path(video_path).resolve()
         artifact_path = self.artifacts_dir / f"{video_path.stem}.json"
-        if artifact_path.exists() and not force:
-            return self._load_artifact(artifact_path)
-        return self._extract_and_save(video_path)
+        
+        cached_records: dict[str, list[ModalityRecord]] = {}
+        if artifact_path.exists():
+            try:
+                cached_records = self._load_artifact(artifact_path)
+            except Exception as exc:
+                logger.warning("Не удалось загрузить кэш артефакта %s: %s. Начинаем заново.", artifact_path.name, exc)
+                
+        enabled = self.enabled_modalities()
+        if not force and all(m in cached_records for m in enabled):
+            return cached_records
+            
+        return self._extract_and_save(video_path, cached_records=cached_records, force=force)
 
     _MODALITY_UNITS: dict[str, str] = {
         "asr": "сегм. речи",
@@ -248,12 +260,23 @@ class VideoRAGPipeline:
         "det": "кадров с описанием",
     }
 
-    def _extract_and_save(self, video_path: Path) -> dict[str, list[ModalityRecord]]:
+    def _extract_and_save(
+        self, video_path: Path, cached_records: dict[str, list[ModalityRecord]] | None = None, force: bool = False,
+    ) -> dict[str, list[ModalityRecord]]:
         artifact_path = self.artifacts_dir / f"{video_path.stem}.json"
         t_video = time.perf_counter()
-        records_by_modality: dict[str, list[ModalityRecord]] = {}
+        records_by_modality = cached_records or {}
+        
         for modality, extractor in self._get_extractors().items():
             t_mod = time.perf_counter()
+            if not force and modality in records_by_modality and records_by_modality[modality]:
+                unit = self._MODALITY_UNITS.get(modality, "записей")
+                logger.info(
+                    "  [%s] Найдено в кэше (%d %s) — пропуск извлечения",
+                    modality.upper(), len(records_by_modality[modality]), unit,
+                )
+                continue
+                
             records = extractor.extract(video_path)
             records_by_modality[modality] = records
             unit = self._MODALITY_UNITS.get(modality, "записей")
@@ -262,7 +285,8 @@ class VideoRAGPipeline:
                 modality.upper(), len(records), unit,
                 _fmt_elapsed(time.perf_counter() - t_mod),
             )
-        self._save_artifact(artifact_path, records_by_modality)
+            self._save_artifact(artifact_path, records_by_modality)
+            
         logger.info("  итого: %s", _fmt_elapsed(time.perf_counter() - t_video))
         return records_by_modality
 
@@ -299,15 +323,22 @@ class VideoRAGPipeline:
 
         for idx, video_path in enumerate(videos, 1):
             artifact_path = self.artifacts_dir / f"{video_path.stem}.json"
-            has_cache = artifact_path.exists() and not force
+            has_complete_cache = False
+            if artifact_path.exists() and not force:
+                try:
+                    cached = self._load_artifact(artifact_path)
+                    if all(m in cached for m in modalities):
+                        has_complete_cache = True
+                except Exception:
+                    pass
 
-            if has_cache:
+            if has_complete_cache:
                 cached_names.append(video_path.name)
                 artifact = self._load_artifact(artifact_path)
             else:
                 self._flush_cache_summary(cached_names, idx, total)
                 logger.info("Видео %d/%d: %s", idx, total, video_path.name)
-                artifact = self._extract_and_save(video_path.resolve())
+                artifact = self.process_video(video_path.resolve(), force=force)
 
             for modality, records in artifact.items():
                 all_records.setdefault(modality, []).extend(records)
@@ -353,7 +384,229 @@ class VideoRAGPipeline:
         )
         return {modality: len(records) for modality, records in all_records.items()}
 
-    def search(self, query: str) -> tuple[QueryDecomposition, list[CandidateWindow]]:
+    def index_uploaded_videos(
+        self,
+        video_paths: list[Path | str],
+        prefix: str = "uploaded_videos",
+        recreate: bool = True,
+    ) -> dict[str, int]:
+        resolved_paths = [Path(p).resolve() for p in video_paths]
+        modalities = self.enabled_modalities()
+        
+        logger.info("=== Indexing uploaded videos to collection %s ===", prefix)
+        
+        all_records: dict[str, list[ModalityRecord]] = {m: [] for m in modalities}
+        
+        for idx, video_path in enumerate(resolved_paths, 1):
+            logger.info("Processing uploaded video %d/%d: %s", idx, len(resolved_paths), video_path.name)
+            # process_video returns cached if it exists, otherwise extracts
+            artifact = self.process_video(video_path, force=False)
+            for modality, records in artifact.items():
+                all_records.setdefault(modality, []).extend(records)
+                
+        all_records = {
+            modality: self._records_for_index(modality, records)
+            for modality, records in all_records.items()
+        }
+        
+        store = self._get_store()
+        embedder = self._get_embedder()
+        
+        for modality, records in all_records.items():
+            if recreate:
+                store.recreate_collection(modality, prefix=prefix)
+            if not records:
+                logger.info("  [%s] 0 records to index", modality.upper())
+                continue
+            
+            logger.info("  [%s] embedding %d records for collection %s...", modality.upper(), len(records), prefix)
+            embeddings = embedder.embed(
+                [record.text for record in records],
+                batch_size=self.cfg["indexing"].get("batch_size", 8),
+            )
+            store.upsert_records(modality, records, embeddings, prefix=prefix)
+            logger.info("  [%s] upload done", modality.upper())
+            
+        return {modality: len(records) for modality, records in all_records.items()}
+
+    def index_uploaded_videos_generator(
+        self,
+        video_paths: list[Path | str],
+        prefix: str = "uploaded_videos",
+        recreate: bool = True,
+    ):
+        import queue
+        import threading
+        from src.utils.telemetry import register_telemetry_listener, unregister_telemetry_listener
+        
+        resolved_paths = [Path(p).resolve() for p in video_paths]
+        event_queue = queue.Queue()
+        
+        # Telemetry listener to capture progress thread-safely
+        def telemetry_listener(
+            stage: str,
+            percent: int,
+            current_idx: int,
+            total_items: int,
+            elapsed: float,
+            eta: float,
+            speed: float,
+            rss_mb: float,
+            device: str,
+            status: str
+        ):
+            event_queue.put({
+                "type": "telemetry",
+                "step": stage,
+                "status": status,
+                "percent": percent,
+                "current_idx": current_idx,
+                "total_items": total_items,
+                "elapsed": elapsed,
+                "eta": eta,
+                "speed": speed,
+                "rss_mb": rss_mb,
+                "device": device
+            })
+            
+        register_telemetry_listener(telemetry_listener)
+        
+        errors = []
+        indexed_stats = {}
+        
+        def run_indexing():
+            try:
+                modalities = self.enabled_modalities()
+                all_records = {m: [] for m in modalities}
+                
+                for modality in modalities:
+                    event_queue.put({
+                        "type": "milestone",
+                        "step": modality,
+                        "status": "running",
+                        "message": f"Извлечение признаков {modality.upper()}..."
+                    })
+                    
+                    for idx, video_path in enumerate(resolved_paths, 1):
+                        artifact_path = self.artifacts_dir / f"{video_path.stem}.json"
+                        cached_records = {}
+                        if artifact_path.exists():
+                            try:
+                                cached_records = self._load_artifact(artifact_path)
+                            except Exception:
+                                pass
+                        
+                        if modality in cached_records and cached_records[modality]:
+                            records = cached_records[modality]
+                            # Yield instant completion signal for cached items
+                            event_queue.put({
+                                "type": "telemetry",
+                                "step": modality,
+                                "status": "completed",
+                                "percent": 100,
+                                "current_idx": len(records),
+                                "total_items": len(records),
+                                "elapsed": 0.05,
+                                "eta": 0.0,
+                                "speed": 1000.0,
+                                "rss_mb": 0.0,
+                                "device": "cached"
+                            })
+                        else:
+                            extractor = self._get_extractors().get(modality)
+                            if extractor:
+                                # Mock some initial ASR progress since whisper internal is opaque
+                                if modality == "asr":
+                                    event_queue.put({
+                                        "type": "telemetry",
+                                        "step": "asr",
+                                        "status": "running",
+                                        "percent": 10,
+                                        "current_idx": 1,
+                                        "total_items": 10,
+                                        "elapsed": 0.5,
+                                        "eta": 4.5,
+                                        "speed": 2.0,
+                                        "rss_mb": 0.0,
+                                        "device": "mps"
+                                    })
+                                records = extractor.extract(video_path)
+                                cached_records[modality] = records
+                                self._save_artifact(artifact_path, cached_records)
+                            else:
+                                records = []
+                                
+                        all_records[modality].extend(records)
+                        
+                    event_queue.put({
+                        "type": "milestone",
+                        "step": modality,
+                        "status": "completed",
+                        "message": f"Завершено {modality.upper()}",
+                        "count": len(all_records[modality])
+                    })
+                    
+                # Format records for indexing
+                all_records = {
+                    m: self._records_for_index(m, recs)
+                    for m, recs in all_records.items()
+                }
+                
+                event_queue.put({
+                    "type": "milestone",
+                    "step": "embed",
+                    "status": "running",
+                    "message": "Векторизация текстов и запись в Qdrant..."
+                })
+                
+                store = self._get_store()
+                embedder = self._get_embedder()
+                
+                for modality, records in all_records.items():
+                    if recreate:
+                        store.recreate_collection(modality, prefix=prefix)
+                    if not records:
+                        indexed_stats[modality] = 0
+                        continue
+                        
+                    embeddings = embedder.embed(
+                        [record.text for record in records],
+                        batch_size=self.cfg["indexing"].get("batch_size", 8),
+                    )
+                    store.upsert_records(modality, records, embeddings, prefix=prefix)
+                    indexed_stats[modality] = len(records)
+                    
+                event_queue.put({
+                    "type": "milestone",
+                    "step": "embed",
+                    "status": "completed",
+                    "message": "Векторный индекс успешно построен!",
+                    "stats": indexed_stats
+                })
+                
+            except Exception as e:
+                logger.error(f"Error in background indexing worker: {e}", exc_info=True)
+                errors.append(str(e))
+            finally:
+                unregister_telemetry_listener(telemetry_listener)
+                
+        # Start worker thread
+        thread = threading.Thread(target=run_indexing, name="indexing_worker")
+        thread.start()
+        
+        # Read from queue and yield events
+        while thread.is_alive() or not event_queue.empty():
+            try:
+                event = event_queue.get(timeout=0.05)
+                yield event
+            except queue.Empty:
+                continue
+                
+        if errors:
+            raise RuntimeError(errors[0])
+
+
+    def search(self, query: str, collection_prefix: str | None = None) -> tuple[QueryDecomposition, list[CandidateWindow]]:
         query_decoupler = self._get_query_decoupler()
         decomposition = (
             query_decoupler.decouple(query)
@@ -382,7 +635,7 @@ class VideoRAGPipeline:
                 if modality == "det"
                 else None
             )
-            hits = store.search(modality, query_vector, top_k=top_k, filter_payload=filter_payload)
+            hits = store.search(modality, query_vector, top_k=top_k, filter_payload=filter_payload, prefix=collection_prefix)
             if score_threshold is not None:
                 hits = [hit for hit in hits if hit.score >= float(score_threshold)]
             all_hits.extend(hits)
@@ -393,8 +646,8 @@ class VideoRAGPipeline:
         candidates = candidates[:final_top_k]
         return decomposition, candidates
 
-    def answer(self, query: str) -> tuple[QueryDecomposition, list[CandidateWindow], str, str | None, int | None]:
-        decomposition, candidates = self.search(query)
+    def answer(self, query: str, collection_prefix: str | None = None) -> tuple[QueryDecomposition, list[CandidateWindow], str, str | None, int | None]:
+        decomposition, candidates = self.search(query, collection_prefix=collection_prefix)
         generator = self._get_answer_generator()
         answer, model_name, key_index = generator.generate(
             query=query,

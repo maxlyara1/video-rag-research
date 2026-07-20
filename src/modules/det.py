@@ -13,6 +13,7 @@ from src.models import ModalityRecord
 from src.runtime import cleanup_torch_memory, detect_torch_device, resolve_torch_dtype
 from src.utils.video_frames import RobustVideoFrameSampler
 from src.utils.video_metadata import probe_video_duration
+from src.utils.telemetry import ProgressTelemetry
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +148,15 @@ class SceneGraphDETExtractor:
             max_end=duration,
             frame_step_sec=self.frame_step_sec,
         )
+        total = len(frames)
+        telemetry = ProgressTelemetry(
+            stage_name="det",
+            total_items=total,
+            device=str(self.device),
+        )
+
         results: list[ModalityRecord] = []
-        for frame in frames:
+        for idx, frame in enumerate(frames, 1):
             caption = self._generate_caption(frame.image.convert("RGB"))
             objects, obj_counting, relations, auxiliary_texts = _extract_scene_graph(caption, self.nlp)
             base_metadata = {
@@ -175,6 +183,8 @@ class SceneGraphDETExtractor:
                         metadata={**base_metadata, "det_type": det_type},
                     )
                 )
+
+            telemetry.update(idx)
         return results
 
     def close(self) -> None:

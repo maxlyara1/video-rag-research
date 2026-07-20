@@ -26,11 +26,12 @@ class QdrantStore:
         self.embedding_dim = embedding_dim
         atexit.register(self.close)
 
-    def collection_name(self, modality: str) -> str:
-        return f"{self.collection_prefix}_{modality}"
+    def collection_name(self, modality: str, prefix: str | None = None) -> str:
+        pref = prefix if prefix is not None else self.collection_prefix
+        return f"{pref}_{modality}"
 
-    def ensure_collection(self, modality: str) -> None:
-        name = self.collection_name(modality)
+    def ensure_collection(self, modality: str, prefix: str | None = None) -> None:
+        name = self.collection_name(modality, prefix)
         if self.client.collection_exists(name):
             return
         self.client.create_collection(
@@ -41,11 +42,11 @@ class QdrantStore:
             ),
         )
 
-    def recreate_collection(self, modality: str) -> None:
-        name = self.collection_name(modality)
+    def recreate_collection(self, modality: str, prefix: str | None = None) -> None:
+        name = self.collection_name(modality, prefix)
         if self.client.collection_exists(name):
             self.client.delete_collection(name)
-        self.ensure_collection(modality)
+        self.ensure_collection(modality, prefix)
 
     def upsert_records(
         self,
@@ -53,9 +54,10 @@ class QdrantStore:
         records: list[ModalityRecord],
         embeddings: np.ndarray,
         batch_size: int = 128,
+        prefix: str | None = None,
     ) -> None:
-        self.ensure_collection(modality)
-        name = self.collection_name(modality)
+        self.ensure_collection(modality, prefix)
+        name = self.collection_name(modality, prefix)
         points: list[models.PointStruct] = []
         for record, embedding in zip(records, embeddings):
             payload = {
@@ -89,6 +91,7 @@ class QdrantStore:
         query_vector: np.ndarray,
         top_k: int,
         filter_payload: dict[str, object] | None = None,
+        prefix: str | None = None,
     ) -> list[SearchHit]:
         query_filter = None
         if filter_payload:
@@ -102,7 +105,7 @@ class QdrantStore:
                 ]
             )
         hits = self.client.query_points(
-            collection_name=self.collection_name(modality),
+            collection_name=self.collection_name(modality, prefix),
             query=query_vector.tolist(),
             limit=top_k,
             query_filter=query_filter,
