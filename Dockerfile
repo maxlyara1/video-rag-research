@@ -12,6 +12,7 @@ WORKDIR /app
 
 # Copy requirements and install python packages
 COPY requirements.txt .
+RUN pip install --no-cache-dir torch --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download spaCy model needed for DET module
